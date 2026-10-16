@@ -10,7 +10,7 @@
  */
 
 // ====== KONFIGURASI ======
-var VERSI = '3.3';              // versi backend (tampil di URL /exec untuk pengecekan)
+var VERSI = '4.0';              // versi backend (tampil di URL /exec untuk pengecekan)
 var SESI_DETIK = 6 * 3600;      // lama sesi login admin (maks. 6 jam – batas CacheService)
 var MAKS_GAGAL = 5;             // percobaan login salah sebelum dikunci sementara
 var KUNCI_DETIK = 15 * 60;      // lama penguncian setelah terlalu banyak gagal
@@ -22,17 +22,19 @@ var SHEETS = {
   Kegiatan: ['id', 'judul', 'jenis', 'tanggal', 'waktuMulai', 'waktuSelesai', 'tempat',
              'penyelenggara', 'deskripsi', 'status', 'dibuatOleh', 'dibuatPada', 'diubahPada',
              // evaluasi RTL (PPEPP)
-             'evaluasiDari', 'evPenyusun', 'evNipPenyusun', 'evJabatanPenyusun', 'evKesimpulan'],
+             'evaluasiDari', 'evPenyusun', 'evNipPenyusun', 'evJabatanPenyusun', 'evKesimpulan',
+             // berkas undangan yang diunggah (id file gambar di Drive, dipisah koma)
+             'undanganIds'],
   Hadir: ['id', 'kegiatanId', 'waktu', 'nama', 'nipNim', 'jabatan', 'unitKerja', 'noHp',
           'ttdFileId', 'pegawaiId'],
-  // Template bagian laporan per jenis kegiatan (latar belakang, dasar, tujuan, kata pengantar)
-  Template: ['jenis', 'latarBelakang', 'dasarPelaksanaan', 'tujuan', 'kataPengantar', 'diubahOleh', 'diubahPada'],
+  // Pengaturan umum (isian bawaan pimpinan rapat & notulis, dll.)
+  Pengaturan: ['kunci', 'nilai', 'diubahOleh', 'diubahPada'],
   // Master data dosen/tendik untuk pilihan cepat di form daftar hadir
   Pegawai: ['id', 'nama', 'nip', 'jabatan', 'unitKerja', 'noHp', 'aktif', 'dibuatPada', 'diubahPada'],
   Notulen: ['kegiatanId', 'latarBelakang', 'dasarPelaksanaan', 'tujuan', 'agenda',
             'pembahasan', 'keputusan', 'tindakLanjut', 'kesimpulan', 'saran',
             'kataPengantar', 'pimpinanRapat', 'nipPimpinan', 'jabatanPimpinan',
-            'notulis', 'nipNotulis', 'fotoIds', 'diubahOleh', 'diubahPada'],
+            'notulis', 'nipNotulis', 'fotoIds', 'diubahOleh', 'diubahPada', 'jabatanNotulis'],
   // Rencana Tindak Lanjut hasil rapat (Penetapan)
   RTL: ['id', 'kegiatanId', 'urut', 'uraian', 'pj', 'tenggat', 'target', 'asalRtlId', 'dibuatPada'],
   // Evaluasi RTL pada rapat berikutnya (Evaluasi, Pengendalian, Peningkatan)
@@ -171,9 +173,11 @@ function doPost(e) {
       simpanPegawai: simpanPegawai_,
       hapusPegawai: hapusPegawai_,
       imporPegawai: imporPegawai_,
-      daftarTemplate: daftarTemplate_,
-      simpanTemplate: simpanTemplate_,
-      bagianLaporanSebelumnya: bagianLaporanSebelumnya_,
+      unggahUndangan: unggahUndangan_,
+      hapusUndangan: hapusUndangan_,
+      daftarUndangan: daftarUndangan_,
+      getPengaturan: function () { return pengaturan_(); },
+      simpanPengaturan: simpanPengaturan_,
       daftarKegiatan: daftarKegiatan_,
       simpanKegiatan: simpanKegiatan_,
       hapusKegiatan: hapusKegiatan_,
@@ -531,6 +535,7 @@ function hapusKegiatan_(p) {
           sh.deleteRow(r._row);
         });
     });
+    String(k.undanganIds || '').split(',').forEach(trashFile_);
     sheet_('Kegiatan').deleteRow(k._row);
     return true;
   });
@@ -549,7 +554,8 @@ function detailKegiatan_(p) {
     .map(function (h) { delete h._row; return h; });
   var n = rows_('Notulen').filter(function (r) { return r.kegiatanId === k.id; })[0] || null;
   if (n) delete n._row;
-  return { kegiatan: k, hadir: hadir, notulen: n, rtl: rtlRapat_(k.id) };
+  return { kegiatan: k, hadir: hadir, notulen: n, rtl: rtlRapat_(k.id), pengaturan: pengaturan_(),
+           jumlahUndangan: String(k.undanganIds || '').split(',').filter(String).length };
 }
 
 function hapusHadir_(p) {
@@ -571,7 +577,7 @@ function simpanNotulen_(p, user) {
      'tindakLanjut', 'kesimpulan', 'saran', 'kataPengantar'].forEach(function (f) {
       if (p[f] !== undefined) data[f] = clean_(p[f], 45000);
     });
-    ['pimpinanRapat', 'nipPimpinan', 'jabatanPimpinan', 'notulis', 'nipNotulis'].forEach(function (f) {
+    ['pimpinanRapat', 'nipPimpinan', 'jabatanPimpinan', 'notulis', 'nipNotulis', 'jabatanNotulis'].forEach(function (f) {
       if (p[f] !== undefined) data[f] = clean_(p[f], 200);
     });
     data.diubahOleh = user.email;
@@ -620,7 +626,7 @@ function dataLaporan_(p) {
     h.ttd = fileB64_(h.ttdFileId);
   });
   d.foto = daftarFoto_({ kegiatanId: p.id });
-  d.template = templateUntuk_(d.kegiatan.jenis);
+  d.undangan = daftarUndangan_({ kegiatanId: p.id });
   var ev = dataEvaluasi_({ kegiatanId: p.id });
   d.evaluasi = ev.sumber.length ? ev : null;
   return d;
@@ -821,6 +827,7 @@ function dataLaporanEvaluasi_(p) {
   var n = rows_('Notulen').filter(function (r) { return r.kegiatanId === p.id; })[0] || null;
   if (n) delete n._row;
   d.notulen = n;
+  d.pengaturan = pengaturan_();
   d.sumber.forEach(function (s) {
     s.items.forEach(function (it) {
       if (!it.ev || !it.ev.buktiFiles) return;
@@ -846,12 +853,42 @@ function pegawaiAktif_() {
   var cache = CacheService.getScriptCache();
   var c = cache.get('pegawai_aktif');
   if (c) return JSON.parse(c);
-  var list = rows_('Pegawai').filter(function (r) { return r.aktif !== 'tidak' && r.nama; })
+  var list = lengkapiIdPegawai_().filter(function (r) { return r.aktif !== 'tidak' && r.nama; })
     .map(function (r) { return { id: r.id, nama: r.nama, nip: r.nip, jabatan: r.jabatan, unitKerja: r.unitKerja }; });
   try { cache.put('pegawai_aktif', JSON.stringify(list), 600); } catch (e) {}
   return list;
 }
 function resetCachePegawai_() { CacheService.getScriptCache().remove('pegawai_aktif'); }
+/** ID pegawai berupa nomor urut (1, 2, 3, …). */
+function idPegawaiBaru_(semua) {
+  var maks = 0;
+  semua.forEach(function (r) { var n = parseInt(r.id, 10); if (String(n) === String(r.id).trim() && n > maks) maks = n; });
+  return String(maks + 1);
+}
+/**
+ * Baris yang diisi langsung di Google Sheet dengan kolom id kosong atau ganda
+ * diberi nomor urut otomatis, agar tetap bisa dipilih di form daftar hadir.
+ */
+function lengkapiIdPegawai_() {
+  var semua = rows_('Pegawai');
+  var dipakai = {}, perlu = [];
+  semua.forEach(function (r) {
+    var id = String(r.id).trim();
+    if (!r.nama) return;
+    if (!id || dipakai[id]) perlu.push(r); else dipakai[id] = true;
+  });
+  if (perlu.length) {
+    withLock_(function () {
+      perlu.forEach(function (r) {
+        r.id = idPegawaiBaru_(semua);
+        if (!r.aktif) r.aktif = 'ya';
+        if (!r.dibuatPada) r.dibuatPada = now_();
+        updateRow_('Pegawai', r._row, r);
+      });
+    });
+  }
+  return semua;
+}
 
 /**
  * PUBLIK – pencarian untuk form daftar hadir. Minimal 3 huruf / 4 angka, maks. 8 hasil,
@@ -872,12 +909,13 @@ function cariPegawai_(p) {
 }
 
 function daftarPegawai_() {
-  return rows_('Pegawai').map(function (r) { delete r._row; return r; })
+  resetCachePegawai_();   // perubahan yang diketik langsung di Sheet langsung terbaca
+  return lengkapiIdPegawai_().map(function (r) { delete r._row; return r; })
     .sort(function (a, b) { return a.nama.localeCompare(b.nama); });
 }
 
 function dataPegawai_(p, lama) {
-  var d = lama ? Object.assign({}, lama) : { id: uid_(), dibuatPada: now_() };
+  var d = lama ? Object.assign({}, lama) : { id: idPegawaiBaru_(rows_('Pegawai').concat(_idBaruImpor)), dibuatPada: now_() };
   d.nama = clean_(p.nama, 120); d.nip = clean_(p.nip, 40).replace(/\s/g, '');
   d.jabatan = clean_(p.jabatan, 120); d.unitKerja = clean_(p.unitKerja, 160);
   d.noHp = clean_(p.noHp, 30); d.aktif = p.aktif === false || p.aktif === 'tidak' ? 'tidak' : 'ya';
@@ -886,6 +924,7 @@ function dataPegawai_(p, lama) {
   return d;
 }
 
+var _idBaruImpor = [];   // id yang sudah dibagikan dalam satu proses impor
 function simpanPegawai_(p) {
   return withLock_(function () {
     var semua = rows_('Pegawai');
@@ -924,96 +963,81 @@ function imporPegawai_(p) {
       if (lama && lama._row < 0) { lewat++; return; }   // duplikat di dalam data impor
       var d = dataPegawai_(it, lama);
       if (lama) { updateRow_('Pegawai', lama._row, d); ubah++; }
-      else { appendRow_('Pegawai', d); d._row = -1; semua.push(d); tambah++; }
+      else { appendRow_('Pegawai', d); d._row = -1; semua.push(d); _idBaruImpor.push({ id: d.id }); tambah++; }
     });
     resetCachePegawai_();
     return { tambah: tambah, ubah: ubah, lewat: lewat };
   });
 }
 
-// ====== TEMPLATE LAPORAN ======
-// Isian otomatis: {judul} {jenis} {hari_tanggal} {tanggal} {bulan} {tahun} {tempat} {penyelenggara} {jumlah_peserta}
-var TEMPLATE_AWAL = [
-  { jenis: 'Rapat PBM',
-    latarBelakang: 'Proses belajar mengajar (PBM) merupakan kegiatan inti dalam penyelenggaraan pendidikan tinggi yang mutunya harus dipantau dan dievaluasi secara berkala sesuai Sistem Penjaminan Mutu Internal (SPMI).\n' +
-      'Pelaksanaan PBM pada setiap semester perlu dikoordinasikan agar jadwal perkuliahan, praktikum, dan penilaian berjalan sesuai kalender akademik, Rencana Pembelajaran Semester (RPS), serta capaian pembelajaran lulusan yang telah ditetapkan.\n' +
-      'Berdasarkan hal tersebut, {penyelenggara} menyelenggarakan {judul} pada {hari_tanggal} bertempat di {tempat} untuk membahas pelaksanaan, kendala, dan perbaikan PBM.',
-    dasarPelaksanaan: '1. Undang-Undang Nomor 12 Tahun 2012 tentang Pendidikan Tinggi\n2. Peraturan Menteri Pendidikan, Kebudayaan, Riset, dan Teknologi Nomor 53 Tahun 2023 tentang Penjaminan Mutu Pendidikan Tinggi\n3. Kalender Akademik Poltekkes Kemenkes Makassar Tahun Akademik berjalan\n4. Undangan rapat dari Ketua Jurusan',
-    tujuan: '- Mengevaluasi pelaksanaan PBM (perkuliahan, praktikum, dan penilaian) pada periode berjalan\n- Mengidentifikasi kendala pelaksanaan PBM beserta solusinya\n- Menyepakati rencana tindak lanjut perbaikan mutu pembelajaran',
-    kataPengantar: '' },
-  { jenis: 'Rapat Evaluasi Kinerja',
-    latarBelakang: 'Pengelolaan kinerja merupakan bagian penting dalam mewujudkan organisasi yang akuntabel dan berorientasi pada hasil. Capaian kinerja unit dan pegawai perlu dipantau secara berkala agar target yang telah ditetapkan dalam perjanjian kinerja dapat tercapai.\n' +
-      'Evaluasi kinerja juga menjadi sarana untuk mengidentifikasi hambatan, menetapkan langkah perbaikan, serta menyiapkan bahan pelaporan kinerja institusi.\n' +
-      'Sehubungan dengan hal tersebut, {penyelenggara} melaksanakan {judul} pada {hari_tanggal} bertempat di {tempat}.',
-    dasarPelaksanaan: '1. Peraturan Pemerintah Nomor 30 Tahun 2019 tentang Penilaian Kinerja Pegawai Negeri Sipil\n2. Peraturan Menteri PANRB Nomor 6 Tahun 2022 tentang Pengelolaan Kinerja Pegawai Aparatur Sipil Negara\n3. Perjanjian Kinerja Poltekkes Kemenkes Makassar tahun {tahun}\n4. Undangan rapat dari Ketua Jurusan',
-    tujuan: '- Mengevaluasi capaian kinerja unit dan pegawai terhadap target yang telah ditetapkan\n- Mengidentifikasi kendala pencapaian kinerja serta upaya perbaikannya\n- Menetapkan rencana tindak lanjut peningkatan kinerja periode berikutnya',
-    kataPengantar: '' },
-  { jenis: 'Rapat Pembentukan Panitia PKL/Rotasi',
-    latarBelakang: 'Praktik Kerja Lapangan (PKL) dan rotasi klinik merupakan bagian dari kurikulum yang memberikan pengalaman belajar langsung kepada mahasiswa di lahan praktik, sehingga mahasiswa mampu menerapkan pengetahuan dan keterampilan sesuai capaian pembelajaran.\n' +
-      'Agar pelaksanaan PKL/rotasi berjalan tertib, efektif, dan terkoordinasi dengan lahan praktik, diperlukan panitia pelaksana dengan pembagian tugas yang jelas, termasuk penetapan pembimbing, jadwal, dan lahan praktik.\n' +
-      'Oleh karena itu, {penyelenggara} menyelenggarakan {judul} pada {hari_tanggal} bertempat di {tempat}.',
-    dasarPelaksanaan: '1. Kurikulum Program Studi yang berlaku\n2. Pedoman Praktik Kerja Lapangan / Rotasi Klinik Jurusan\n3. Perjanjian kerja sama dengan institusi lahan praktik\n4. Undangan rapat dari Ketua Jurusan',
-    tujuan: '- Membentuk panitia pelaksana PKL/rotasi beserta pembagian tugasnya\n- Menetapkan jadwal, lahan praktik, dan pembimbing\n- Menyepakati persiapan administrasi dan koordinasi dengan lahan praktik',
-    kataPengantar: '' },
-  { jenis: 'Rapat Insidentil',
-    latarBelakang: 'Dalam penyelenggaraan kegiatan akademik dan administrasi, terdapat hal-hal yang memerlukan pembahasan dan pengambilan keputusan segera di luar jadwal rapat rutin.\n' +
-      'Sehubungan dengan hal tersebut, {penyelenggara} menyelenggarakan {judul} pada {hari_tanggal} bertempat di {tempat} untuk membahas dan menyepakati langkah penanganan yang diperlukan.',
-    dasarPelaksanaan: '1. Kebutuhan koordinasi mendesak di lingkungan {penyelenggara}\n2. Undangan rapat dari Ketua Jurusan',
-    tujuan: '- Membahas permasalahan yang memerlukan penanganan segera\n- Menetapkan keputusan dan pembagian tugas tindak lanjut',
-    kataPengantar: '' },
-  { jenis: 'Umum',
-    latarBelakang: '{judul} diselenggarakan oleh {penyelenggara} sebagai bagian dari upaya peningkatan mutu penyelenggaraan pendidikan dan tata kelola di lingkungan Poltekkes Kemenkes Makassar. Kegiatan dilaksanakan pada {hari_tanggal} bertempat di {tempat}.',
-    dasarPelaksanaan: '1. Program kerja {penyelenggara} tahun {tahun}\n2. Undangan kegiatan',
-    tujuan: '- Melaksanakan {judul} sesuai rencana\n- Menghasilkan kesepakatan dan rencana tindak lanjut',
-    kataPengantar: '' }
-];
 
-function semuaTemplate_() {
-  var rows = rows_('Template');
-  if (!rows.length) {   // isi template awal saat pertama kali dipakai
-    TEMPLATE_AWAL.forEach(function (t) { appendRow_('Template', Object.assign({ diubahPada: now_() }, t)); });
-    _sheetCache = {};
-    rows = rows_('Template');
-  }
-  return rows.map(function (r) { delete r._row; return r; });
+// ====== PENGATURAN (isian bawaan) ======
+var PENGATURAN_AWAL = {
+  pimpinanNama: 'Manjilala, S.Gz., M.Gizi',
+  pimpinanNip: '19771009 200604 1 010',
+  pimpinanJabatan: 'Ketua Jurusan Gizi',
+  notulisNama: 'Aswita Amir, DCN, M.Si',
+  notulisNip: '19770116 200112 2 003',
+  notulisJabatan: 'Sekretaris Jurusan Gizi'
+};
+function pengaturan_() {
+  var out = Object.assign({}, PENGATURAN_AWAL);
+  rows_('Pengaturan').forEach(function (r) { if (r.kunci) out[r.kunci] = r.nilai; });
+  return out;
 }
-function templateUntuk_(jenis) {
-  var all = semuaTemplate_();
-  var j = String(jenis || '').toLowerCase().trim();
-  return all.filter(function (t) { return t.jenis.toLowerCase().trim() === j; })[0] ||
-    all.filter(function (t) { return t.jenis === 'Umum'; })[0] || null;
-}
-function daftarTemplate_() { return semuaTemplate_(); }
-
-function simpanTemplate_(p, user) {
-  var jenis = clean_(p.jenis, 120);
-  if (!jenis) throw new Error('Nama jenis kegiatan wajib diisi.');
+function simpanPengaturan_(p, user) {
+  wajibSuper_(user);
   return withLock_(function () {
-    semuaTemplate_();
-    var row = rows_('Template').filter(function (t) { return t.jenis.toLowerCase() === jenis.toLowerCase(); })[0];
-    var d = { jenis: row ? row.jenis : jenis, latarBelakang: clean_(p.latarBelakang, 20000), dasarPelaksanaan: clean_(p.dasarPelaksanaan, 10000),
-      tujuan: clean_(p.tujuan, 10000), kataPengantar: clean_(p.kataPengantar, 20000), diubahOleh: user.email, diubahPada: now_() };
-    if (p.hapus) { if (row) deleteRows_('Template', [row]); return true; }
-    if (row) updateRow_('Template', row._row, d); else appendRow_('Template', d);
-    return d;
+    var rows = rows_('Pengaturan');
+    Object.keys(PENGATURAN_AWAL).forEach(function (k) {
+      if (p[k] === undefined) return;
+      var v = clean_(p[k], 300);
+      var row = rows.filter(function (r) { return r.kunci === k; })[0];
+      var d = { kunci: k, nilai: v, diubahOleh: user.email, diubahPada: now_() };
+      if (row) updateRow_('Pengaturan', row._row, d); else appendRow_('Pengaturan', d);
+    });
+    return pengaturan_();
   });
 }
 
-/** Bagian laporan dari rapat sebelumnya yang jenisnya sama (untuk tombol "Salin dari rapat sebelumnya"). */
-function bagianLaporanSebelumnya_(p) {
-  var keg = rows_('Kegiatan');
-  var k = keg.filter(function (r) { return r.id === p.kegiatanId; })[0];
-  if (!k) throw new Error('Kegiatan tidak ditemukan.');
-  var notulen = rows_('Notulen');
-  var kandidat = keg.filter(function (r) {
-    return r.id !== k.id && r.jenis === k.jenis && r.tanggal <= k.tanggal;
-  }).sort(function (a, b) { return b.tanggal.localeCompare(a.tanggal); });
-  for (var i = 0; i < kandidat.length; i++) {
-    var n = notulen.filter(function (x) { return x.kegiatanId === kandidat[i].id; })[0];
-    if (n && (n.latarBelakang || n.dasarPelaksanaan || n.tujuan)) {
-      return { dari: { judul: kandidat[i].judul, tanggal: kandidat[i].tanggal },
-        latarBelakang: n.latarBelakang, dasarPelaksanaan: n.dasarPelaksanaan, tujuan: n.tujuan, kataPengantar: n.kataPengantar };
-    }
-  }
-  return null;
+// ====== UNDANGAN (gambar hasil scan/foto/PDF yang diunggah) ======
+function unggahUndangan_(p) {
+  if (!p.data || p.data.indexOf('data:image/') !== 0) throw new Error('Undangan harus berupa gambar (PDF diubah otomatis oleh aplikasi).');
+  var mime = p.data.slice(5, p.data.indexOf(';'));
+  var bytes = Utilities.base64Decode(p.data.split(',')[1]);
+  if (bytes.length > 6 * 1024 * 1024) throw new Error('Ukuran halaman undangan maksimal 6 MB.');
+  var file = folder_().createFile(Utilities.newBlob(bytes, mime,
+    'undangan_' + p.kegiatanId + '_' + uid_() + (mime === 'image/png' ? '.png' : '.jpg')));
+  file.setDescription(clean_(p.nama, 200));
+  return withLock_(function () {
+    var k = rows_('Kegiatan').filter(function (r) { return r.id === p.kegiatanId; })[0];
+    if (!k) { trashFile_(file.getId()); throw new Error('Kegiatan tidak ditemukan.'); }
+    var ids = String(k.undanganIds || '').split(',').filter(String);
+    ids.push(file.getId());
+    k.undanganIds = ids.join(',');
+    updateRow_('Kegiatan', k._row, k);
+    return { id: file.getId(), jumlah: ids.length };
+  });
+}
+function hapusUndangan_(p) {
+  return withLock_(function () {
+    var k = rows_('Kegiatan').filter(function (r) { return r.id === p.kegiatanId; })[0];
+    if (!k) throw new Error('Kegiatan tidak ditemukan.');
+    var ids = String(k.undanganIds || '').split(',').filter(String);
+    if (p.semua) { ids.forEach(trashFile_); ids = []; }
+    else { ids = ids.filter(function (id) { return id !== p.fileId; }); trashFile_(p.fileId); }
+    k.undanganIds = ids.join(',');
+    updateRow_('Kegiatan', k._row, k);
+    return { jumlah: ids.length };
+  });
+}
+function daftarUndangan_(p) {
+  var k = rows_('Kegiatan').filter(function (r) { return r.id === p.kegiatanId; })[0];
+  if (!k || !k.undanganIds) return [];
+  return String(k.undanganIds).split(',').filter(String).map(function (id) {
+    try {
+      var f = DriveApp.getFileById(id);
+      return { id: id, nama: f.getDescription() || '', mime: f.getMimeType(), data: Utilities.base64Encode(f.getBlob().getBytes()) };
+    } catch (e) { return null; }
+  }).filter(Boolean);
 }

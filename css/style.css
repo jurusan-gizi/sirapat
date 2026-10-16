@@ -295,3 +295,29 @@ input[readonly] { background: #F4F7F7; color: var(--muted); }
 .preview { font-family: "Times New Roman", serif; font-size: .95rem; line-height: 1.6; text-align: justify; padding: 6px 4px; }
 .preview h4 { font-family: inherit; margin: 10px 0 4px; }
 .preview p { margin: 0 0 6px; text-indent: 1.2em; }
+
+/* ===== Dokumen Rapat (U-A-N-G) ===== */
+.uang { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-bottom: 4px; }
+.uang .card { margin-bottom: 0; }
+.u-item { padding: 16px; }
+.u-head { display: flex; align-items: center; gap: 12px; }
+.u-head > div { flex: 1; min-width: 0; }
+.u-head h3 { margin: 0; font-size: .98rem; }
+.u-head small { color: var(--muted); }
+.u-huruf { flex: 0 0 42px; height: 42px; border-radius: 12px; background: var(--teal); color: var(--lime); font-weight: 800; font-size: 1.3rem;
+  display: flex; align-items: center; justify-content: center; }
+.u-item > p { margin: 10px 0 0; }
+.warn-t { color: var(--amber); font-weight: 600; }
+.und-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); gap: 8px; margin-top: 10px; }
+.und-grid figure { margin: 0; position: relative; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #fff; }
+.und-grid img { width: 100%; aspect-ratio: 210/297; object-fit: cover; object-position: top; display: block; }
+.und-grid figcaption { font-size: .7rem; text-align: center; padding: 3px; color: var(--muted); }
+.und-grid .icon-btn { position: absolute; top: 2px; right: 2px; background: rgba(255,255,255,.9); padding: 2px 6px; }
+hr.sep { border: 0; border-top: 1px solid var(--line); margin: 18px 0 14px; }
+.grid-side + .grid-side { margin-top: 0; }
+.uang + .grid-side { margin-top: 16px; }
+.khead .btnrow { margin: 0; flex-wrap: nowrap; }
+@media (max-width: 560px) { .khead .btnrow { flex-wrap: wrap; } }
+.uang .u-item:first-child { grid-column: 1 / -1; }
+.u-head .btn { flex: 0 0 auto; white-space: nowrap; }
+.uang { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }

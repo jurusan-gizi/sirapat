@@ -8,6 +8,7 @@ Aplikasi PWA untuk **Poltekkes Kemenkes Makassar**. Aplikasi ini memuat:
 - **Notulen rapat**: pimpinan, notulis, latar belakang, agenda, pembahasan, keputusan, kesimpulan, saran, serta **foto dokumentasi**.
 - **Rencana Tindak Lanjut (RTL)** terstruktur: uraian, penanggung jawab, tenggat, dan target/indikator (*Penetapan*).
 - **Evaluasi RTL** di rapat berikutnya. Admin bisa memilih **beberapa rapat sebelumnya** sekaligus, misalnya dua rapat bulanan. Isinya status (Selesai/Proses/Belum/Tidak relevan), % capaian, bukti (tautan/berkas), kendala, tindakan koreksi, dan opsi **melanjutkan RTL** yang belum tuntas ke rapat ini. Dengan begitu siklus **PPEPP** berjalan.
+- **Dokumen Rapat (Word) – format UANG**: Sampul + **U**ndangan (hasil unggah foto/scan/PDF) + **A**bsen/daftar hadir bertanda tangan + **N**otulen (dengan tabel RTL) + **G**ambar/foto kegiatan.
 - **Laporan Evaluasi Tindak Lanjut (Word)**: ringkasan capaian + grafik, rincian per rapat, kendala & koreksi (pengendalian), RTL lanjutan (peningkatan), lampiran bukti dukung.
 - **Laporan Kegiatan Word (.docx) lengkap** dengan satu klik. Isinya sampul berdesain, lembar pengesahan, kata pengantar, daftar isi, BAB I–IV, dan Lampiran (daftar hadir bertanda tangan, notulen, dokumentasi).
 
@@ -82,7 +83,6 @@ apps-script/Code.gs, appsscript.json      → backend (salin ke Apps Script)
 
 ## Cara pakai
 
-0. **Template Laporan (sekali di awal)**: buka menu nama Anda → **Template Laporan**. Sudah tersedia template awal untuk *Rapat PBM, Rapat Evaluasi Kinerja, Rapat Pembentukan Panitia PKL/Rotasi, Rapat Insidentil,* dan *Umum*. Periksa dan sesuaikan isinya, terutama **dasar hukum**. Jika Latar Belakang, Dasar, Tujuan, atau Kata Pengantar dikosongkan di notulen, laporan otomatis memakai template sesuai jenis kegiatan. Di form notulen juga tersedia tombol **Isi dari template** dan **Salin dari rapat sebelumnya**.
 0. **Data Pegawai (sekali di awal)**: buka menu nama Anda → **Data Pegawai** → **Impor dari Excel**. Blok kolom *Nama | NIP | Jabatan | Unit Kerja | No HP* di Excel, salin, tempel, lalu klik **Impor**. Peserta yang mengisi manual bisa ditambahkan ke Data Pegawai lewat tombol **＋ Data Pegawai** di daftar hadir.
 
 1. **Login**, lalu pilih **＋ Kegiatan Baru**. Isi judul, tanggal, waktu, dan tempat, lalu Simpan.
@@ -92,7 +92,7 @@ apps-script/Code.gs, appsscript.json      → backend (salin ke Apps Script)
    - Awali baris dengan `1.` untuk daftar bernomor, atau `-` untuk poin.
 4. Masih di tab **Notulen & RTL**, isi tabel **RTL** (uraian, PJ, tenggat, target) lalu **Simpan Notulen & RTL**.
 5. Pada rapat berikutnya, buka tab **Evaluasi RTL** → centang rapat-rapat sebelumnya yang akan dievaluasi → **Tampilkan RTL** → isi status, capaian, bukti, kendala, tindakan koreksi. RTL berstatus Proses/Belum otomatis dicentang **"Lanjutkan sebagai RTL rapat ini"** (bisa dibatalkan). Klik **Simpan Evaluasi**.
-6. Di tab **Laporan**, unduh **Laporan Kegiatan** dan/atau **Laporan Evaluasi Tindak Lanjut** (Word).
+6. Di tab **Dokumen Rapat**, klik **Unggah Undangan** untuk mengunggah foto, scan, atau PDF undangan resmi. Setelah itu klik **Unduh Dokumen Rapat**. Laporan **Evaluasi RTL** juga bisa diunduh dari tab yang sama.
 7. Saat membuka laporan di Microsoft Word, pilih **Ya** ketika diminta memperbarui field. Langkah ini membuat nomor halaman daftar isi akurat.
 8. Setelah kegiatan selesai, ubah status menjadi **Ditutup** lewat tombol ✎ Edit agar form tidak menerima isian lagi.
 
@@ -109,3 +109,6 @@ Setelah mengubah `Code.gs`, buka **Deploy → Kelola deployment → ✎ Edit →
 - Data tersimpan di Spreadsheet **"SIRAPAT - Database"**, sedangkan tanda tangan dan foto ada di folder **"SIRAPAT - Berkas"**. Keduanya berada di Drive akun yang men-deploy.
 - QR code dibuat oleh layanan `api.qrserver.com`, yang hanya menerima isi link form.
 - Jika aplikasi diperbarui, naikkan `VERSION` di `sw.js` (misalnya `sirapat-v3`) agar cache di HP pengguna ikut diperbarui.
+
+## Pengaturan (superadmin)
+Buka menu nama → **⚙️ Pengaturan** untuk mengatur isian bawaan pimpinan rapat dan notulis, misalnya Ketua Jurusan dan Sekretaris Jurusan. Data ini otomatis terisi di setiap notulen baru dan dipakai sebagai penyusun Laporan Evaluasi RTL.

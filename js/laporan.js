@@ -294,7 +294,7 @@
           { reference: 'angka', levels: [{ level: 0, format: D.LevelFormat.DECIMAL, text: '%1.', alignment: D.AlignmentType.LEFT,
             style: { paragraph: { indent: { left: mmT(10), hanging: mmT(6) } } } }] }
         ] },
-        sections: [
+        sections: o.sections ? o.sections(pageA4, footerNo, header) : [
           { properties: { page: { size: pageA4.size, margin: { top: 0, bottom: 0, left: 0, right: 0, header: 0, footer: 0 } } }, children: o.sampul },
           { properties: { page: Object.assign({}, pageA4, { pageNumbers: { start: 1, formatType: D.NumberFormat.LOWER_ROMAN } }) },
             footers: { default: footerNo() }, children: o.awal },
@@ -348,13 +348,13 @@
   }
 
   // =====================================================================
-  //  LAPORAN KEGIATAN
+  //  DOKUMEN RAPAT (U-A-N-G): Sampul, Undangan, Absen, Notulen, Gambar
   // =====================================================================
-  function buildLaporan(D, data, assets) {
+  function buildDokumenRapat(D, data, assets) {
     var K = kit(D, assets);
     var run = K.run, para = K.para, cell = K.cell, C = K.C, mmT = K.mmT, CW = K.CW;
     var k = data.kegiatan || {}, n = data.notulen || {}, hadir = data.hadir || [], foto = data.foto || [];
-    var rtl = data.rtl || [];
+    var undangan = data.undangan || [], rtl = data.rtl || [];
     var ins = assets.institusi || {}, b64 = assets.b64, kota = ins.kota || 'Makassar';
     var judul = k.judul || 'Judul Kegiatan';
     var tahun = (parseTgl(k.tanggal) || new Date()).getFullYear();
@@ -362,79 +362,35 @@
     var waktu = [k.waktuMulai, k.waktuSelesai].filter(Boolean).join(' – ');
     if (waktu) waktu += ' WITA';
     var pimpinan = { label: n.jabatanPimpinan || 'Pimpinan Rapat', nama: n.pimpinanRapat, nip: n.nipPimpinan };
-    var notulis = { label: 'Notulis', nama: n.notulis, nip: n.nipNotulis };
-    var ringkas = data.evaluasi ? ringkasEvaluasi(data.evaluasi) : null;
+    var notulis = { label: n.jabatanNotulis || 'Notulis', nama: n.notulis, nip: n.nipNotulis };
 
-    var sampul = K.sampul({ kicker: 'LAPORAN ' + (k.jenis ? k.jenis.toUpperCase() : 'KEGIATAN'), judul: judul,
-      penyelenggara: k.penyelenggara, baris: [tglPanjang(k.tanggal, true), k.tempat || ''], tahun: tahun });
+    var judulBagian = function (t, sub) {
+      var arr = [para([run(t, { bold: true, size: 28 })], { alignment: C, spacing: { before: 0, after: sub ? 0 : 200 }, pageBreakBefore: true, keepNext: true })];
+      if (sub) arr.push(para([run(sub, { bold: true })], { alignment: C, spacing: { after: 160, line: 276 }, keepNext: true }));
+      return arr;
+    };
 
-    // ---- halaman awal ----
-    var awal = [para([run('LEMBAR PENGESAHAN', { bold: true, size: 28 })], { alignment: C, spacing: { after: 360 } })];
-    awal.push(K.info([['Judul Kegiatan', judul], ['Jenis Kegiatan', k.jenis || '-'], ['Hari / Tanggal', tglPanjang(k.tanggal, true)],
-      ['Waktu', waktu || '-'], ['Tempat', k.tempat || '-'], ['Penyelenggara', k.penyelenggara || '-'], ['Jumlah Peserta', hadir.length + ' orang']], mmT(40)));
-    awal = awal.concat(K.kosong(2));
-    awal.push(K.blokTtd(Object.assign({ atas: 'Mengetahui,' }, pimpinan), Object.assign({ atas: '' }, notulis), tglTtd));
-    awal.push(K.bab('KATA PENGANTAR', 'ii'));
-    var kpDefault = 'Puji syukur kami panjatkan ke hadirat Tuhan Yang Maha Esa karena atas rahmat dan karunia-Nya laporan kegiatan ' +
-      judul + ' ini dapat diselesaikan dengan baik.\n' +
-      'Laporan ini disusun sebagai bentuk pertanggungjawaban dan dokumentasi atas pelaksanaan kegiatan yang diselenggarakan oleh ' +
-      (k.penyelenggara || ins.nama || 'panitia') + ' pada ' + tglPanjang(k.tanggal, true) + (k.tempat ? ' bertempat di ' + k.tempat : '') +
-      '. Laporan ini memuat latar belakang, pelaksanaan, hasil kegiatan, rencana tindak lanjut, serta lampiran berupa daftar hadir, notulen, dan dokumentasi kegiatan.\n' +
-      'Kami mengucapkan terima kasih kepada seluruh pihak yang telah berpartisipasi dan mendukung terlaksananya kegiatan ini. ' +
-      'Kami menyadari laporan ini masih memiliki kekurangan, sehingga saran dan masukan yang membangun sangat kami harapkan. ' +
-      'Semoga laporan ini bermanfaat bagi semua pihak.';
-    awal = awal.concat(K.teks(n.kataPengantar, { fallback: kpDefault }));
-    awal.push(para(tglTtd, { alignment: D.AlignmentType.RIGHT, spacing: { before: 240, after: 0 } }));
-    awal.push(para('Tim Penyusun', { alignment: D.AlignmentType.RIGHT }));
-    var idxDI = awal.length;
+    var sampul = K.sampul({ kicker: 'DOKUMEN RAPAT', judul: judul, penyelenggara: k.penyelenggara,
+      baris: [tglPanjang(k.tanggal, true), k.tempat || ''], tahun: tahun });
 
-    // ---- isi ----
-    var isi = [];
-    isi.push(K.bab('BAB I PENDAHULUAN'));
-    isi.push(K.subbab('A. Latar Belakang')); isi = isi.concat(K.teks(n.latarBelakang));
-    isi.push(K.subbab('B. Dasar Pelaksanaan')); isi = isi.concat(K.teks(n.dasarPelaksanaan, { noIndent: true }));
-    isi.push(K.subbab('C. Tujuan')); isi = isi.concat(K.teks(n.tujuan, { noIndent: true }));
-
-    isi.push(K.bab('BAB II PELAKSANAAN KEGIATAN'));
-    isi.push(K.subbab('A. Waktu dan Tempat'));
-    isi.push(para('Kegiatan ini dilaksanakan pada:', { spacing: { after: 60 } }));
-    isi.push(K.info([['Hari / Tanggal', tglPanjang(k.tanggal, true)], ['Waktu', waktu || '-'], ['Tempat', k.tempat || '-']], mmT(35)));
-    isi.push(K.subbab('B. Peserta'));
-    isi.push(K.paragraf([run('Kegiatan ini dihadiri oleh '), run(hadir.length + ' orang', { bold: true }),
-      run(' peserta. Daftar hadir peserta selengkapnya terlampir pada Lampiran 1.')]));
-    isi.push(K.subbab('C. Agenda Kegiatan'));
-    isi = isi.concat(K.teks(n.agenda || k.deskripsi, { noIndent: true }));
-
-    isi.push(K.bab('BAB III HASIL KEGIATAN'));
-    isi.push(K.subbab('A. Hasil Pembahasan')); isi = isi.concat(K.teks(n.pembahasan));
-    isi.push(K.subbab('B. Keputusan / Kesepakatan')); isi = isi.concat(K.teks(n.keputusan, { noIndent: true }));
-    isi.push(K.subbab('C. Rencana Tindak Lanjut'));
-    if (rtl.length) {
-      isi.push(K.paragraf('Rencana tindak lanjut (RTL) yang ditetapkan dalam kegiatan ini beserta penanggung jawab dan tenggat waktunya adalah sebagai berikut:'));
-      isi.push(K.tabelRtl(rtl));
-      isi.push(para('', { spacing: { after: 0 } }));
-    } else isi = isi.concat(K.teks(n.tindakLanjut, { noIndent: true }));
-    if (ringkas && ringkas.total) {
-      isi.push(K.subbab('D. Evaluasi Tindak Lanjut Rapat Sebelumnya'));
-      isi.push(K.paragraf('Dalam kegiatan ini juga dilakukan evaluasi terhadap ' + ringkas.total + ' RTL dari ' +
-        data.evaluasi.sumber.map(function (s) { return s.kegiatan.judul + ' (' + tglPanjang(s.kegiatan.tanggal) + ')'; }).join(' dan ') +
-        '. Sebanyak ' + ringkas.per['Selesai'] + ' RTL telah selesai (' + ringkas.persenSelesai + '%), ' + ringkas.per['Proses'] +
-        ' dalam proses, dan ' + ringkas.per['Belum'] + ' belum dilaksanakan, dengan rata-rata capaian ' + ringkas.rataCapaian +
-        '%. Rincian evaluasi disajikan dalam Laporan Evaluasi Tindak Lanjut tersendiri.'));
-      isi.push(K.tabelEvaluasi(ringkas.items, false));
-      isi.push(para('', { spacing: { after: 0 } }));
+    // ---- U: Undangan (gambar satu halaman penuh) ----
+    var hlmUndangan = [];
+    if (undangan.length) {
+      undangan.forEach(function (u, i) {
+        var ratio = (u.h && u.w) ? u.h / u.w : 1.414;
+        var maxW = 180, maxH = 262;
+        var w = maxW, h = w * ratio;
+        if (h > maxH) { h = maxH; w = h / ratio; }
+        hlmUndangan.push(para([K.img(b64(u.data), w, h, /png/.test(u.mime) ? 'png' : 'jpg')],
+          { alignment: C, spacing: { after: 0, line: 240 }, pageBreakBefore: i > 0 }));
+      });
+    } else {
+      hlmUndangan.push(para([run('UNDANGAN', { bold: true, size: 28 })], { alignment: C, spacing: { before: 2400, after: 200 } }));
+      hlmUndangan.push(para([run('(Undangan belum diunggah – silakan unggah melalui aplikasi atau sisipkan di halaman ini)', { italics: true, color: '888888' })], { alignment: C }));
     }
 
-    isi.push(K.bab('BAB IV PENUTUP'));
-    isi.push(K.subbab('A. Kesimpulan')); isi = isi.concat(K.teks(n.kesimpulan));
-    isi.push(K.subbab('B. Saran')); isi = isi.concat(K.teks(n.saran, { noIndent: true }));
-    isi.push(para('', { spacing: { after: 0 } }));
-    isi.push(K.paragraf('Demikian laporan kegiatan ini kami susun dengan sebenar-benarnya untuk dapat dipergunakan sebagaimana mestinya.'));
-    isi = isi.concat(K.kosong(1));
-    isi.push(K.blokTtd(null, Object.assign({ atas: '' }, pimpinan), tglTtd));
-
-    // ---- Lampiran 1: daftar hadir ----
-    isi.push(K.bab('LAMPIRAN 1. DAFTAR HADIR'));
+    // ---- A: Daftar hadir ----
+    var isi = [];
     isi = isi.concat(K.kop());
     isi.push(para([run('DAFTAR HADIR', { bold: true, size: 26 })], { alignment: C, spacing: { after: 0 } }));
     isi.push(para([run(judul.toUpperCase(), { bold: true })], { alignment: C, spacing: { after: 120, line: 276 } }));
@@ -456,43 +412,44 @@
       ] }));
     });
     if (!hadir.length) rowsDH.push(new D.TableRow({ children: [cell(para([run('Belum ada peserta yang mengisi daftar hadir.', { italics: true })], { alignment: C }), CW, { columnSpan: 4 })] }));
-    K.addLines(Math.max(1, hadir.length) * 2.4);
     isi.push(K.table([wNo, wNama, wJab, wTtd], rowsDH));
-    isi = isi.concat(K.kosong(1));
-    isi.push(K.blokTtd(null, { atas: '', label: 'Penanggung Jawab', nama: n.pimpinanRapat, nip: n.nipPimpinan }, tglTtd));
+    isi.push(para([run('Jumlah peserta hadir: ' + hadir.length + ' orang', { italics: true, size: 22 })], { spacing: { before: 80, after: 120 } }));
+    isi.push(K.blokTtd(null, { atas: 'Mengetahui,', label: pimpinan.label, nama: pimpinan.nama, nip: pimpinan.nip }, tglTtd));
 
-    // ---- Lampiran 2: notulen ----
-    isi.push(K.bab('LAMPIRAN 2. NOTULEN RAPAT'));
-    isi = isi.concat(K.kop());
+    // ---- N: Notulen ----
+    var kopN = K.kop();
+    isi.push(para('', { pageBreakBefore: true, spacing: { after: 0, line: 120 } }));
+    isi = isi.concat(kopN);
     isi.push(para([run('NOTULEN RAPAT', { bold: true, size: 26 })], { alignment: C, spacing: { after: 200 } }));
     isi.push(K.info([['Kegiatan', judul], ['Hari / Tanggal', tglPanjang(k.tanggal, true)], ['Waktu', waktu || '-'],
       ['Tempat', k.tempat || '-'], ['Pimpinan Rapat', n.pimpinanRapat || '-'], ['Notulis', n.notulis || '-'],
       ['Peserta', hadir.length + ' orang (daftar hadir terlampir)']]));
     function bagian(label, t) {
-      K.addLines(1.5);
       return [para([run(label, { bold: true })], { spacing: { before: 200, after: 60 }, keepNext: true })].concat(K.teks(t, { noIndent: true }));
     }
     isi = isi.concat(bagian('Agenda:', n.agenda || k.deskripsi));
     isi = isi.concat(bagian('Pembahasan:', n.pembahasan));
     isi = isi.concat(bagian('Keputusan / Kesepakatan:', n.keputusan));
-    if (ringkas && ringkas.total) {
-      isi.push(para([run('Evaluasi RTL rapat sebelumnya:', { bold: true })], { spacing: { before: 200, after: 60 }, keepNext: true }));
-      isi.push(K.paragraf(ringkas.per['Selesai'] + ' dari ' + ringkas.total + ' RTL selesai (' + ringkas.persenSelesai + '%); rata-rata capaian ' + ringkas.rataCapaian + '%.', { indent: undefined }));
-    }
-    if (rtl.length) {
-      isi.push(para([run('Rencana Tindak Lanjut:', { bold: true })], { spacing: { before: 200, after: 80 }, keepNext: true }));
-      isi.push(K.tabelRtl(rtl));
-    } else isi = isi.concat(bagian('Rencana Tindak Lanjut:', n.tindakLanjut));
+    isi.push(para([run('Rencana Tindak Lanjut (RTL):', { bold: true })], { spacing: { before: 200, after: 80 }, keepNext: true }));
+    if (rtl.length) isi.push(K.tabelRtl(rtl));
+    else isi = isi.concat(K.teks(n.tindakLanjut, { noIndent: true, fallback: '-' }));
     isi = isi.concat(K.kosong(1));
-    isi.push(K.blokTtd(Object.assign({ atas: 'Mengetahui,' }, pimpinan), notulis, tglTtd));
+    isi.push(K.blokTtd(Object.assign({ atas: 'Mengetahui,' }, pimpinan), Object.assign({ atas: '' }, notulis), tglTtd));
 
-    // ---- Lampiran 3: dokumentasi ----
-    isi.push(K.bab('LAMPIRAN 3. DOKUMENTASI KEGIATAN'));
+    // ---- G: Gambar / dokumentasi ----
+    isi = isi.concat(judulBagian('DOKUMENTASI KEGIATAN', judul.toUpperCase()));
     isi = isi.concat(galeri(D, K, foto.map(function (f) { return { data: b64(f.data), mime: f.mime, w: f.w, h: f.h, ket: f.keterangan || ('Dokumentasi ' + judul) }; })));
 
-    var awalFinal = awal.slice(0, idxDI).concat(K.daftarIsi(), awal.slice(idxDI));
-    return K.dokumen({ title: 'Laporan ' + judul, header: 'Laporan ' + (k.jenis || 'Kegiatan') + ' – ' + judul,
-      sampul: sampul, awal: awalFinal, isi: isi });
+    return K.dokumen({
+      title: 'Dokumen Rapat ' + judul,
+      sections: function (pageA4, footerNo) {
+        return [
+          { properties: { page: { size: pageA4.size, margin: { top: 0, bottom: 0, left: 0, right: 0, header: 0, footer: 0 } } }, children: sampul },
+          { properties: { page: { size: pageA4.size, margin: { top: mmT(15), bottom: mmT(15), left: mmT(15), right: mmT(15), header: 0, footer: 0 } } }, children: hlmUndangan },
+          { properties: { page: Object.assign({}, pageA4, { margin: Object.assign({}, pageA4.margin, { top: mmT(20) }) }) }, children: isi }
+        ];
+      }
+    });
   }
 
   /** Grid foto 2 kolom dengan keterangan. */
@@ -510,175 +467,104 @@
         ], half, { verticalAlign: D.VerticalAlign.TOP });
       }) }));
     }
-    K.addMm(Math.ceil(list.length / 2) * 70);
     return [K.table([half, half], rows, K.NOBORDER)];
   }
 
   // =====================================================================
-  //  LAPORAN EVALUASI TINDAK LANJUT (PPEPP)
+  //  EVALUASI TINDAK LANJUT RAPAT (versi ringkas)
   // =====================================================================
   function buildLaporanEvaluasi(D, data, assets) {
     var K = kit(D, assets);
     var run = K.run, para = K.para, cell = K.cell, C = K.C, mmT = K.mmT, CW = K.CW;
-    var k = data.kegiatan || {}, n = data.notulen || {};
+    var k = data.kegiatan || {}, n = data.notulen || {}, pg = data.pengaturan || {};
     var ins = assets.institusi || {}, b64 = assets.b64, kota = ins.kota || 'Makassar';
     var R = ringkasEvaluasi(data);
     var sumber = data.sumber || [];
     var tahun = (parseTgl(k.tanggal) || new Date()).getFullYear();
     var tglTtd = kota + ', ' + tglPanjang(k.tanggal);
-    var daftarRapat = sumber.map(function (s) { return s.kegiatan.judul + ' (' + tglPanjang(s.kegiatan.tanggal) + ')'; });
-    var penyusun = { label: k.evJabatanPenyusun || 'Sekretaris Jurusan', nama: k.evPenyusun, nip: k.evNipPenyusun };
-    var pimpinan = { label: n.jabatanPimpinan || 'Pimpinan Rapat', nama: n.pimpinanRapat, nip: n.nipPimpinan };
-    var judul = 'Evaluasi Rencana Tindak Lanjut ' + (k.judul || '');
+    var penyusun = { label: k.evJabatanPenyusun || pg.notulisJabatan || 'Sekretaris Jurusan', nama: k.evPenyusun || pg.notulisNama, nip: k.evNipPenyusun || pg.notulisNip };
+    var pimpinan = { label: n.jabatanPimpinan || pg.pimpinanJabatan || 'Ketua Jurusan', nama: n.pimpinanRapat || pg.pimpinanNama, nip: n.nipPimpinan || pg.pimpinanNip };
 
-    var sampul = K.sampul({ kicker: 'LAPORAN EVALUASI TINDAK LANJUT', judul: judul,
+    var sampul = K.sampul({ kicker: 'EVALUASI TINDAK LANJUT RAPAT', judul: 'Evaluasi RTL ' + (k.judul || ''),
       labelPenyelenggara: 'Disusun oleh', penyelenggara: k.penyelenggara,
       baris: [tglPanjang(k.tanggal, true), 'Siklus PPEPP – Evaluasi & Pengendalian'], tahun: tahun });
 
-    // ---- halaman awal ----
-    var awal = [K.bab('KATA PENGANTAR', 'i')];
-    awal = awal.concat(K.teks('Puji syukur kami panjatkan ke hadirat Tuhan Yang Maha Esa karena atas rahmat dan karunia-Nya Laporan Evaluasi Tindak Lanjut ini dapat diselesaikan.\n' +
-      'Laporan ini disusun sebagai bagian dari siklus Penetapan, Pelaksanaan, Evaluasi, Pengendalian, dan Peningkatan (PPEPP) Sistem Penjaminan Mutu Internal, ' +
-      'khususnya untuk memantau ketercapaian rencana tindak lanjut (RTL) yang telah ditetapkan pada ' + daftarRapat.join(' dan ') +
-      '. Evaluasi dilaksanakan pada ' + k.judul + ', ' + tglPanjang(k.tanggal, true) + '.\n' +
-      'Kami berharap laporan ini dapat menjadi dasar pengambilan keputusan dan perbaikan berkelanjutan. Terima kasih kepada seluruh penanggung jawab RTL atas kerja sama dan dukungannya.'));
-    awal.push(para(tglTtd, { alignment: D.AlignmentType.RIGHT, spacing: { before: 240, after: 0 } }));
-    awal.push(para(penyusun.label, { alignment: D.AlignmentType.RIGHT }));
-    var idxDI = awal.length;
+    var isi = K.kop();
+    isi.push(para([run('EVALUASI TINDAK LANJUT RAPAT', { bold: true, size: 26 })], { alignment: C, spacing: { after: 160 } }));
+    isi.push(K.info([
+      ['Dievaluasi pada', (k.judul || '-') + ', ' + tglPanjang(k.tanggal, true)],
+      ['RTL dari rapat', sumber.map(function (s) { return s.kegiatan.judul + ' (' + tglPanjang(s.kegiatan.tanggal) + ')'; }).join('; ') || '-'],
+      ['Jumlah RTL', R.total + ' RTL'],
+      ['Capaian', R.per['Selesai'] + ' selesai (' + R.persenSelesai + '%), ' + R.per['Proses'] + ' proses, ' + R.per['Belum'] + ' belum' +
+        (R.per['Tidak relevan'] ? ', ' + R.per['Tidak relevan'] + ' tidak relevan' : '') + ' · rata-rata capaian ' + R.rataCapaian + '%']
+    ], mmT(34)));
+    isi.push(para('', { spacing: { after: 80, line: 240 } }));
 
-    // ---- BAB I ----
-    var isi = [];
-    isi.push(K.bab('BAB I PENDAHULUAN'));
-    isi.push(K.subbab('A. Latar Belakang'));
-    isi.push(K.paragraf('Setiap rapat menghasilkan keputusan dan rencana tindak lanjut (RTL) yang harus dilaksanakan oleh penanggung jawab sesuai tenggat yang disepakati. ' +
-      'Agar keputusan rapat benar-benar terlaksana, ketercapaian RTL perlu dievaluasi secara berkala pada rapat berikutnya sebagai wujud penerapan siklus PPEPP.'));
-    isi.push(K.paragraf('Pada ' + (k.judul || 'rapat ini') + ' yang dilaksanakan ' + tglPanjang(k.tanggal, true) + (k.tempat ? ' di ' + k.tempat : '') +
-      ', dilakukan evaluasi terhadap ' + R.total + ' RTL yang berasal dari ' + sumber.length + ' rapat sebelumnya.'));
-    isi.push(K.subbab('B. Tujuan'));
-    isi = isi.concat(K.teks('- Mengetahui tingkat ketercapaian RTL hasil rapat sebelumnya.\n- Mengidentifikasi kendala pelaksanaan RTL dan menetapkan tindakan koreksi (pengendalian).\n' +
-      '- Menetapkan RTL lanjutan sebagai langkah peningkatan berkelanjutan.', { noIndent: true }));
-    isi.push(K.subbab('C. Ruang Lingkup'));
-    isi.push(K.paragraf('Evaluasi mencakup RTL dari rapat-rapat berikut:'));
-    var wR = [mmT(9), mmT(78), mmT(32), CW - mmT(119)];
-    var rowsR = [new D.TableRow({ tableHeader: true, children: [K.headCell('No', wR[0]), K.headCell('Rapat', wR[1]), K.headCell('Tanggal', wR[2]), K.headCell('Jumlah RTL', wR[3])] })];
-    sumber.forEach(function (s, i) {
-      rowsR.push(new D.TableRow({ children: [cell(para(String(i + 1), { alignment: C, spacing: { after: 0 } }), wR[0]), cell(K.small(s.kegiatan.judul), wR[1]),
-        cell(K.small(tglPanjang(s.kegiatan.tanggal)), wR[2]), cell(para(String(s.items.length), { alignment: C, spacing: { after: 0 } }), wR[3])] }));
-    });
-    K.addLines(2 + sumber.length * 2);
-    isi.push(K.table(wR, rowsR));
-    isi.push(K.subbab('D. Metode Evaluasi'));
-    isi.push(K.paragraf('Setiap RTL dinilai statusnya (Selesai, Proses, Belum, atau Tidak relevan) beserta persentase capaian dan bukti pendukung. ' +
-      'Persentase penyelesaian dihitung dari jumlah RTL berstatus Selesai dibagi jumlah RTL yang relevan.'));
-
-    // ---- BAB II ----
-    isi.push(K.bab('BAB II HASIL EVALUASI'));
-    isi.push(K.subbab('A. Ringkasan Capaian'));
-    isi.push(K.paragraf([run('Dari '), run(R.total + ' RTL', { bold: true }), run(' yang dievaluasi, '),
-      run(R.per['Selesai'] + ' RTL telah selesai (' + R.persenSelesai + '%)', { bold: true }),
-      run(', ' + R.per['Proses'] + ' RTL masih dalam proses, ' + R.per['Belum'] + ' RTL belum dilaksanakan, dan ' + R.per['Tidak relevan'] +
-        ' RTL dinyatakan tidak relevan lagi. Rata-rata capaian seluruh RTL yang relevan adalah '),
-      run(R.rataCapaian + '%', { bold: true }), run(', termasuk kategori ' + kategori(R.persenSelesai) + '.')]));
-    var wS = [mmT(70), mmT(35), CW - mmT(105)];
-    var rowsS = [new D.TableRow({ tableHeader: true, children: [K.headCell('Status', wS[0]), K.headCell('Jumlah', wS[1]), K.headCell('Persentase', wS[2])] })];
-    STATUS.forEach(function (st) {
-      rowsS.push(new D.TableRow({ children: [cell(para([run(st, { bold: true, color: STATUS_WARNA[st] })], { spacing: { after: 0, line: 252 } }), wS[0]),
-        cell(para(String(R.per[st]), { alignment: C, spacing: { after: 0 } }), wS[1]),
-        cell(para((R.total ? Math.round(R.per[st] * 100 / R.total) : 0) + '%', { alignment: C, spacing: { after: 0 } }), wS[2])] }));
-    });
-    if (R.per['']) rowsS.push(new D.TableRow({ children: [cell(K.small('Belum dievaluasi', { italics: true }), wS[0]),
-      cell(para(String(R.per['']), { alignment: C, spacing: { after: 0 } }), wS[1]), cell(para('-', { alignment: C, spacing: { after: 0 } }), wS[2])] }));
-    rowsS.push(new D.TableRow({ children: [cell(K.small('Jumlah', { bold: true }), wS[0]), cell(para([run(String(R.total), { bold: true })], { alignment: C, spacing: { after: 0 } }), wS[1]),
-      cell(para([run('100%', { bold: true })], { alignment: C, spacing: { after: 0 } }), wS[2])] }));
-    K.addLines(12);
-    isi.push(K.table(wS, rowsS));
-    if (assets.grafik) {
-      var gw = 130, gh = gw * assets.grafik.h / assets.grafik.w;
-      isi.push(para([K.img(assets.grafik.data, gw, gh)], { alignment: C, spacing: { before: 200, after: 0 } }));
-      isi.push(para([run('Gambar 1. Sebaran status RTL', { italics: true, size: 20 })], { alignment: C }));
-      K.addMm(gh + 12);
-    }
-    isi.push(K.subbab('B. Rincian Evaluasi per Rapat'));
-    sumber.forEach(function (s, i) {
-      K.addLines(2);
-      isi.push(para([run((i + 1) + '. ' + s.kegiatan.judul, { bold: true }), run(' – ' + tglPanjang(s.kegiatan.tanggal, true), { color: '555555' })],
-        { spacing: { before: 160, after: 80 }, keepNext: true }));
-      isi.push(s.items.length ? K.tabelEvaluasi(s.items.map(function (it) { return { rtl: it.rtl, ev: it.ev || {} }; }), true)
-        : para([run('Tidak ada RTL pada rapat ini.', { italics: true })]));
-    });
-
-    // ---- BAB III Pengendalian ----
-    isi.push(K.bab('BAB III PENGENDALIAN'));
-    isi.push(K.subbab('A. Kendala dan Tindakan Koreksi'));
-    var belum = R.items.filter(function (it) { return it.ev.status !== 'Selesai' && it.ev.status !== 'Tidak relevan'; });
-    if (belum.length) {
-      isi.push(K.paragraf('Terdapat ' + belum.length + ' RTL yang belum tuntas. Kendala dan tindakan koreksi yang ditetapkan adalah sebagai berikut:'));
-      var wK = [mmT(9), mmT(45), mmT(43), CW - mmT(97)];
-      var rowsK = [new D.TableRow({ tableHeader: true, children: [K.headCell('No', wK[0]), K.headCell('RTL', wK[1]), K.headCell('Kendala', wK[2]), K.headCell('Tindakan Koreksi', wK[3])] })];
-      belum.forEach(function (it, i) {
-        rowsK.push(new D.TableRow({ cantSplit: true, children: [cell(para(String(i + 1), { alignment: C, spacing: { after: 0 } }), wK[0]),
-          cell([K.small(it.rtl.uraian), K.small('PJ: ' + (it.rtl.pj || '-'), { size: 18, color: '555555' })], wK[1]),
-          cell(K.small(it.ev.kendala || '-'), wK[2]), cell(K.small(it.ev.koreksi || '-'), wK[3])] }));
+    var w = [mmT(9), mmT(41), mmT(25), mmT(18), mmT(17), CW - mmT(110)];
+    var rows = [new D.TableRow({ tableHeader: true, children: ['No', 'Rencana Tindak Lanjut', 'PJ / Tenggat', 'Status', 'Capaian', 'Kendala / Koreksi']
+      .map(function (h, i) { return cell(para([run(h, { bold: true, color: 'FFFFFF', size: 18 })], { alignment: C, spacing: { after: 0, line: 240 } }), w[i],
+        { shading: { type: D.ShadingType.CLEAR, color: 'auto', fill: K.TEAL }, margins: { top: 60, bottom: 60, left: 40, right: 40 } }); }) })];
+    var no = 0;
+    sumber.forEach(function (s) {
+      if (sumber.length > 1) rows.push(new D.TableRow({ children: [cell(para([run(s.kegiatan.judul + ' – ' + tglPanjang(s.kegiatan.tanggal), { bold: true, size: 20 })],
+        { spacing: { after: 0, line: 252 } }), CW, { columnSpan: 6, shading: { type: D.ShadingType.CLEAR, color: 'auto', fill: 'E5F6F5' } })] }));
+      s.items.forEach(function (it) {
+        var ev = it.ev || {}, r = it.rtl; no++;
+        var kk = [];
+        if (ev.kendala) kk.push(K.small('Kendala: ' + ev.kendala, { size: 18 }));
+        if (ev.koreksi) kk.push(K.small('Koreksi: ' + ev.koreksi, { size: 18 }));
+        if (ev.dilanjutkanKe) kk.push(K.small('(dilanjutkan sebagai RTL rapat ini)', { size: 18, italics: true, color: K.TEAL }));
+        if (!kk.length) kk.push(K.small('-', { size: 18 }));
+        var rtlCell = [K.small(r.uraian, { size: 20 })];
+        if (ev.bukti) rtlCell.push(K.small('Bukti: ' + ev.bukti, { size: 16, color: '1F5F9F' }));
+        rows.push(new D.TableRow({ cantSplit: true, children: [
+          cell(para(String(no), { alignment: C, spacing: { after: 0 } }), w[0]),
+          cell(rtlCell, w[1]),
+          cell([K.small(r.pj || '-', { size: 20 }), K.small(r.tenggat ? tglPanjang(r.tenggat) : '', { size: 16, color: '555555' })], w[2]),
+          cell(para([run(ev.status || 'Belum dinilai', { bold: true, size: 18, color: STATUS_WARNA[ev.status || ''] })], { alignment: C, spacing: { after: 0, line: 240 } }), w[3]),
+          cell(para(ev.status && ev.status !== 'Tidak relevan' ? (ev.capaian || 0) + '%' : '-', { alignment: C, spacing: { after: 0 } }), w[4]),
+          cell(kk, w[5])
+        ] }));
       });
-      K.addLines(2 + belum.length * 3);
-      isi.push(K.table(wK, rowsK));
-    } else {
-      isi.push(K.paragraf('Seluruh RTL yang relevan telah selesai dilaksanakan sehingga tidak diperlukan tindakan koreksi.'));
-    }
-    var tr = R.items.filter(function (it) { return it.ev.status === 'Tidak relevan'; });
-    if (tr.length) {
-      isi.push(K.subbab('B. RTL yang Tidak Relevan'));
-      isi = isi.concat(K.teks(tr.map(function (it) { return '- ' + it.rtl.uraian + (it.ev.kendala ? ' (alasan: ' + it.ev.kendala + ')' : ''); }).join('\n'), { noIndent: true }));
-    }
+    });
+    if (!no) rows.push(new D.TableRow({ children: [cell(para([run('Tidak ada RTL yang dievaluasi.', { italics: true })], { alignment: C }), CW, { columnSpan: 6 })] }));
+    isi.push(K.table(w, rows));
 
-    // ---- BAB IV Peningkatan & Penutup ----
-    isi.push(K.bab('BAB IV PENINGKATAN DAN PENUTUP'));
-    isi.push(K.subbab('A. Rencana Tindak Lanjut Lanjutan'));
     var lanjut = R.items.filter(function (it) { return it.ev.dilanjutkanKe; });
-    if (lanjut.length) {
-      isi.push(K.paragraf('Sebagai langkah peningkatan, ' + lanjut.length + ' RTL yang belum tuntas ditetapkan kembali sebagai RTL ' + (k.judul || 'rapat ini') + ' untuk dievaluasi pada rapat berikutnya:'));
-      isi = isi.concat(K.teks(lanjut.map(function (it, i) { return (i + 1) + '. ' + it.rtl.uraian + ' (PJ: ' + (it.rtl.pj || '-') + ')'; }).join('\n'), { noIndent: true }));
-    } else {
-      isi.push(K.paragraf('Tidak ada RTL yang dilanjutkan ke periode berikutnya.'));
-    }
-    isi.push(K.subbab('B. Kesimpulan'));
-    isi = isi.concat(K.teks(k.evKesimpulan, { fallback: 'Tingkat penyelesaian RTL sebesar ' + R.persenSelesai + '% dengan rata-rata capaian ' + R.rataCapaian +
-      '% termasuk kategori ' + kategori(R.persenSelesai) + '. ' + (belum.length ? 'RTL yang belum tuntas perlu mendapat perhatian penanggung jawab dan dipantau pada rapat berikutnya.' : 'Kinerja tindak lanjut rapat perlu dipertahankan.') }));
-    isi.push(K.paragraf('Demikian laporan evaluasi tindak lanjut ini disusun untuk dapat dipergunakan sebagaimana mestinya.'));
+    isi.push(para([run('Tindak lanjut: ', { bold: true }), run(lanjut.length
+      ? lanjut.length + ' RTL yang belum tuntas ditetapkan kembali sebagai RTL ' + (k.judul || 'rapat ini') + ' untuk dievaluasi pada rapat berikutnya.'
+      : 'tidak ada RTL yang dilanjutkan.')], { alignment: K.J, spacing: { before: 160, after: 120 } }));
+    if (k.evKesimpulan) isi = isi.concat(K.teks(k.evKesimpulan, { noIndent: true }));
     isi = isi.concat(K.kosong(1));
     isi.push(K.blokTtd(Object.assign({ atas: 'Mengetahui,' }, pimpinan), Object.assign({ atas: '' }, penyusun), tglTtd));
 
-    // ---- Lampiran: bukti dukung ----
-    isi.push(K.bab('LAMPIRAN. BUKTI DUKUNG'));
-    var gambar = [], lainnya = [];
-    R.items.forEach(function (it, i) {
+    // lampiran bukti (gambar) bila ada
+    var gambar = [];
+    no = 0;
+    R.items.forEach(function (it) {
+      no++;
       (it.ev.buktiFiles || []).forEach(function (f) {
-        if (f.data) gambar.push({ data: b64(f.data), mime: f.mime, w: f.w, h: f.h, ket: 'RTL ' + (i + 1) + ': ' + it.rtl.uraian.slice(0, 80) });
-        else lainnya.push('- RTL ' + (i + 1) + ' – ' + f.nama + (f.url ? ' (' + f.url + ')' : ''));
+        if (f.data) gambar.push({ data: b64(f.data), mime: f.mime, w: f.w, h: f.h, ket: 'RTL ' + no + ': ' + it.rtl.uraian.slice(0, 80) });
       });
-      if (it.ev.bukti) lainnya.push('- RTL ' + (i + 1) + ' – ' + it.ev.bukti);
     });
-    if (lainnya.length) {
-      isi.push(para([run('Daftar tautan / berkas bukti:', { bold: true })], { spacing: { after: 60 } }));
-      isi = isi.concat(K.teks(lainnya.join('\n'), { noIndent: true }));
+    if (gambar.length) {
+      isi.push(para([run('LAMPIRAN BUKTI DUKUNG', { bold: true, size: 26 })], { alignment: C, pageBreakBefore: true, spacing: { after: 200 } }));
+      isi = isi.concat(galeri(D, K, gambar));
     }
-    if (gambar.length) isi = isi.concat(galeri(D, K, gambar));
-    if (!gambar.length && !lainnya.length) isi = isi.concat(K.belumDiisi());
 
-    var awalFinal = awal.slice(0, idxDI).concat(K.daftarIsi(), awal.slice(idxDI));
-    return K.dokumen({ title: 'Laporan Evaluasi Tindak Lanjut ' + (k.judul || ''), header: 'Laporan Evaluasi Tindak Lanjut – ' + (k.judul || ''),
-      sampul: sampul, awal: awalFinal, isi: isi });
+    return K.dokumen({
+      title: 'Evaluasi Tindak Lanjut ' + (k.judul || ''),
+      sections: function (pageA4) {
+        return [
+          { properties: { page: { size: pageA4.size, margin: { top: 0, bottom: 0, left: 0, right: 0, header: 0, footer: 0 } } }, children: sampul },
+          { properties: { page: Object.assign({}, pageA4, { margin: Object.assign({}, pageA4.margin, { top: mmT(20) }) }) }, children: isi }
+        ];
+      }
+    });
   }
 
-  /** Data diagram status untuk grafikSvg(). */
-  function dataGrafik(ev) {
-    var R = ringkasEvaluasi(ev);
-    var warna = { 'Selesai': '#1E8E5A', 'Proses': '#D99A00', 'Belum': '#C0392B', 'Tidak relevan': '#8A9A9D' };
-    return STATUS.map(function (st) { return { label: st, nilai: R.per[st], warna: warna[st] }; });
-  }
-
-  var api = { buildLaporan: buildLaporan, buildLaporanEvaluasi: buildLaporanEvaluasi, ringkasEvaluasi: ringkasEvaluasi,
-    dataGrafik: dataGrafik, tglPanjang: tglPanjang, STATUS: STATUS };
+  var api = { buildDokumenRapat: buildDokumenRapat, buildLaporanEvaluasi: buildLaporanEvaluasi, ringkasEvaluasi: ringkasEvaluasi,
+    tglPanjang: tglPanjang, STATUS: STATUS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Laporan = api;
 })(this);

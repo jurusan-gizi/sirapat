@@ -78,8 +78,8 @@
       '<span class="uname">' + esc(u.nama) + '</span><span class="caret">▾</span></button>' +
       '<div class="menu" id="menuUser" hidden><div class="menu-head"><b>' + esc(u.nama) + '</b><small>' + esc(u.email) + '</small>' +
       '<span class="tag">' + (u.peran === 'superadmin' ? 'Superadmin' : 'Admin') + '</span></div>' +
-      '<a href="#/">🏠 Beranda</a><a href="#/pegawai">📇 Data Pegawai</a><a href="#/template">📝 Template Laporan</a><a href="#/akun">🔑 Ganti Password</a>' +
-      (u.peran === 'superadmin' ? '<a href="#/admin">👥 Kelola Admin</a>' : '') +
+      '<a href="#/">🏠 Beranda</a><a href="#/pegawai">📇 Data Pegawai</a><a href="#/akun">🔑 Ganti Password</a>' +
+      (u.peran === 'superadmin' ? '<a href="#/pengaturan">⚙️ Pengaturan</a><a href="#/admin">👥 Kelola Admin</a>' : '') +
       '<button id="btnLogout">↩ Keluar</button></div></div>';
     var menu = $('#menuUser');
     $('#btnUser').onclick = function (e) { e.stopPropagation(); menu.hidden = !menu.hidden; };
@@ -101,7 +101,7 @@
     if (parts[0] === 'akun') return viewAkun(false);
     if (parts[0] === 'admin') return viewKelolaAdmin();
     if (parts[0] === 'pegawai') return viewPegawai();
-    if (parts[0] === 'template') return viewTemplate(decodeURIComponent(parts[1] || ''));
+    if (parts[0] === 'pengaturan') return viewPengaturan();
     if (parts[0] === 'kegiatan' && parts[1] === 'baru') return viewFormKegiatan(null);
     if (parts[0] === 'kegiatan' && parts[1] && parts[2] === 'edit') return viewFormKegiatan(parts[1]);
     if (parts[0] === 'kegiatan' && parts[1]) return viewDetail(parts[1], parts[2] || 'hadir');
@@ -252,58 +252,31 @@
     $('#tutupPw').onclick = function () { ov.remove(); };
   }
 
-  // ================= View: Template Laporan =================
-  function viewTemplate(pilih) {
-    $app.innerHTML = '<a class="back" href="#/">← Beranda</a>' +
-      '<div class="pagehead"><div><p class="eyebrow">Pengaturan laporan</p><h2>Template Laporan</h2>' +
-      '<p class="muted small">Dipakai otomatis untuk Latar Belakang, Dasar Pelaksanaan, Tujuan & Kata Pengantar bila bagian itu dikosongkan di notulen.</p></div></div>' +
-      '<div id="tplBody"><div class="loader"><span></span></div></div>';
-    state.templates = null;
-    ambilTemplate().then(function (list) {
-      var jenisAda = list.map(function (t) { return t.jenis; });
-      var semua = jenisAda.concat(CFG.JENIS_KEGIATAN.filter(function (j) { return jenisAda.map(function (x) { return x.toLowerCase(); }).indexOf(j.toLowerCase()) < 0; }));
-      pilih = pilih || jenisAda[0] || 'Umum';
-      var t = list.filter(function (x) { return x.jenis === pilih; })[0] || { jenis: pilih };
-      $('#tplBody').innerHTML =
-        '<div class="chips">' + semua.map(function (j) {
-          var punya = jenisAda.indexOf(j) >= 0;
-          return '<a class="chip-j' + (j === pilih ? ' on' : '') + (punya ? '' : ' kosong') + '" href="#/template/' + encodeURIComponent(j) + '">' + esc(j) + (punya ? '' : ' ＋') + '</a>';
-        }).join('') + '<button class="chip-j kosong" id="btnJenisBaru">＋ Jenis lain…</button></div>' +
-        '<form class="card form" id="fTpl"><h3>' + esc(pilih) + (pilih === 'Umum' ? ' <span class="tag">dipakai bila jenis kegiatan tidak punya template</span>' : '') + '</h3>' +
-        '<p class="hint">Isian otomatis yang bisa dipakai: <code>{judul}</code> <code>{jenis}</code> <code>{hari_tanggal}</code> <code>{tanggal}</code> <code>{bulan}</code> <code>{tahun}</code> ' +
-        '<code>{tempat}</code> <code>{penyelenggara}</code> <code>{jumlah_peserta}</code>. Satu baris = satu paragraf; awali “1. ” untuk penomoran, “- ” untuk poin.</p>' +
-        LAPORAN_FIELDS.map(function (f) {
-          return field(f[1], '<textarea name="' + f[0] + '" rows="' + (f[0] === 'latarBelakang' ? 8 : 5) + '">' + esc(t[f[0]]) + '</textarea>', f[0] === 'kataPengantar' ? 'Kosongkan untuk memakai kata pengantar bawaan aplikasi.' : '');
-        }).join('') +
-        '<details class="lapbox"><summary><b>Pratinjau</b> <small>contoh hasil dengan data rapat fiktif</small></summary><div id="prevTpl" class="preview"></div></details>' +
-        '<div class="actions sticky">' + (pilih !== 'Umum' && t.latarBelakang !== undefined ? '<button type="button" class="btn danger ghost" id="btnHapusTpl">Hapus template</button>' : '<span></span>') +
-        '<button class="btn primary" id="btnSimpanTpl">Simpan Template</button></div></form>';
-      var f = $('#fTpl');
-      var contoh = { judul: pilih + ' Bulan Oktober 2026', jenis: pilih, tanggal: '2026-10-16', tempat: 'Ruang Rapat Jurusan Gizi', penyelenggara: 'Jurusan Gizi' };
-      var pratinjau = function () {
-        $('#prevTpl').innerHTML = LAPORAN_FIELDS.map(function (x) {
-          var v = isiTemplate(f[x[0]].value, contoh, 25);
-          return v.trim() ? '<h4>' + esc(x[1]) + '</h4>' + v.split('\n').filter(String).map(function (l) { return '<p>' + esc(l) + '</p>'; }).join('') : '';
-        }).join('') || '<p class="muted">Belum ada isi.</p>';
-      };
-      f.oninput = pratinjau; pratinjau();
-      $('#btnJenisBaru').onclick = function () {
-        var j = prompt('Nama jenis kegiatan (samakan dengan pilihan "Jenis Kegiatan" saat membuat kegiatan):', '');
-        if (j && j.trim()) location.hash = '#/template/' + encodeURIComponent(j.trim());
-      };
-      f.onsubmit = function (e) {
+  // ================= View: Pengaturan (superadmin) =================
+  function viewPengaturan() {
+    if (state.user.peran !== 'superadmin') { location.hash = '#/'; return; }
+    $app.innerHTML = '<a class="back" href="#/">← Beranda</a><div class="narrow"><div class="pagehead"><div><p class="eyebrow">Pengaturan</p><h2>Isian Bawaan Notulen</h2>' +
+      '<p class="muted small">Otomatis terisi di setiap notulen baru (tetap bisa diganti per rapat). Ubah di sini bila periode jabatan berganti.</p></div></div>' +
+      '<div id="pgBody"><div class="loader"><span></span></div></div></div>';
+    api('getPengaturan').then(function (pg) {
+      $('#pgBody').innerHTML = '<form class="card form" id="fPg">' +
+        '<h3 class="sect">Pimpinan Rapat</h3>' +
+        field('Nama & gelar', '<input name="pimpinanNama" value="' + esc(pg.pimpinanNama) + '">') +
+        '<div class="grid2">' + field('NIP', '<input name="pimpinanNip" value="' + esc(pg.pimpinanNip) + '">') +
+        field('Jabatan', '<input name="pimpinanJabatan" value="' + esc(pg.pimpinanJabatan) + '">') + '</div>' +
+        '<h3 class="sect">Notulis</h3>' +
+        field('Nama & gelar', '<input name="notulisNama" value="' + esc(pg.notulisNama) + '">') +
+        '<div class="grid2">' + field('NIP', '<input name="notulisNip" value="' + esc(pg.notulisNip) + '">') +
+        field('Jabatan', '<input name="notulisJabatan" value="' + esc(pg.notulisJabatan) + '">') + '</div>' +
+        '<p class="muted small">Notulis juga dipakai sebagai penyusun Laporan Evaluasi RTL.</p>' +
+        '<div class="actions"><span></span><button class="btn primary" id="btnPg">Simpan Pengaturan</button></div></form>';
+      $('#fPg').onsubmit = function (e) {
         e.preventDefault();
-        var d = formData(f); d.jenis = pilih;
-        var b = $('#btnSimpanTpl'); busy(b, true, 'Menyimpan…');
-        api('simpanTemplate', d).then(function () { busy(b, false); state.templates = null; toast('Template “' + pilih + '” tersimpan.', 'ok'); viewTemplate(pilih); })
+        var b = $('#btnPg'); busy(b, true, 'Menyimpan…');
+        api('simpanPengaturan', formData(this)).then(function () { busy(b, false); toast('Pengaturan tersimpan.', 'ok'); })
           .catch(function (err) { busy(b, false); toast(err.message, 'error'); });
       };
-      if ($('#btnHapusTpl')) $('#btnHapusTpl').onclick = function () {
-        if (!confirm('Hapus template “' + pilih + '”? Kegiatan jenis ini akan memakai template Umum.')) return;
-        api('simpanTemplate', { jenis: pilih, hapus: true }).then(function () { state.templates = null; toast('Template dihapus.', 'ok'); location.hash = '#/template'; })
-          .catch(function (err) { toast(err.message, 'error'); });
-      };
-    }).catch(function (e) { $('#tplBody').innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
+    }).catch(function (e) { $('#pgBody').innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
   }
 
   // ================= View: Data Pegawai =================
@@ -500,9 +473,10 @@
         '<h2>' + esc(k.judul) + '</h2><p class="muted">📅 ' + esc(tgl(k.tanggal, true)) +
         (k.waktuMulai ? ' · 🕘 ' + esc(k.waktuMulai) + (k.waktuSelesai ? '–' + esc(k.waktuSelesai) : '') + ' WITA' : '') +
         (k.tempat ? ' · 📍 ' + esc(k.tempat) : '') + '</p></div>' +
-        '<a class="btn ghost sm" href="#/kegiatan/' + esc(id) + '/edit">✎ Edit</a></div>' +
+        '<div class="btnrow"><a class="btn sm' + (d.jumlahUndangan ? ' ghost' : ' primary') + '" href="#/kegiatan/' + esc(id) + '/laporan">📨 ' +
+        (d.jumlahUndangan ? 'Undangan ✓' : 'Unggah Undangan') + '</a><a class="btn ghost sm" href="#/kegiatan/' + esc(id) + '/edit">✎ Edit</a></div></div>' +
         '<nav class="tabs">' +
-        ['hadir:👥 Daftar Hadir', 'notulen:📝 Notulen & RTL', 'evaluasi:🔁 Evaluasi RTL', 'laporan:📄 Laporan'].map(function (t) {
+        ['hadir:👥 Daftar Hadir', 'notulen:📝 Notulen & RTL', 'laporan:📄 Dokumen Rapat', 'evaluasi:🔁 Evaluasi RTL'].map(function (t) {
           var p = t.split(':');
           return '<a href="#/kegiatan/' + esc(id) + '/' + p[0] + '" class="' + (tab === p[0] ? 'on' : '') + '">' + p[1] + '</a>';
         }).join('') + '</nav><div id="tabBody"></div>';
@@ -584,38 +558,11 @@
   }
 
   // ---- Tab notulen & RTL ----
-  var LAPORAN_FIELDS = [
-    ['latarBelakang', 'Latar Belakang', 5, ''],
-    ['dasarPelaksanaan', 'Dasar Pelaksanaan', 4, 'Satu baris satu dasar; awali “1. ” untuk penomoran.'],
-    ['tujuan', 'Tujuan Kegiatan', 3, 'Awali “- ” untuk poin.'],
-    ['kataPengantar', 'Kata Pengantar', 4, 'Kosongkan untuk kata pengantar otomatis.']
-  ];
   var NOTULEN_FIELDS = [
     ['agenda', 'Agenda / Susunan Acara', 4, 'mis. 1. Pembukaan  2. Evaluasi RTL  3. Diskusi  4. Penutup'],
     ['pembahasan', 'Hasil Pembahasan / Jalannya Rapat', 8, 'Uraikan poin-poin pembahasan.'],
     ['keputusan', 'Keputusan / Kesepakatan', 4, '']
   ];
-  var NOTULEN_FIELDS_2 = [
-    ['kesimpulan', 'Kesimpulan', 3, ''],
-    ['saran', 'Saran', 3, '']
-  ];
-  /** Ganti isian {judul}, {tanggal}, dst. pada template dengan data kegiatan. */
-  function isiTemplate(teks, k, jumlah) {
-    var d = parseDate(k.tanggal);
-    var map = { judul: k.judul, jenis: k.jenis, tanggal: tgl(k.tanggal), hari_tanggal: tgl(k.tanggal, true),
-      bulan: d ? ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'][d.getMonth()] : '',
-      tahun: d ? d.getFullYear() : '', tempat: k.tempat || '-', penyelenggara: k.penyelenggara || CFG.INSTITUSI.nama,
-      jumlah_peserta: jumlah == null ? '' : jumlah };
-    return String(teks || '').replace(/\{(\w+)\}/g, function (m, key) { return key in map ? map[key] : m; });
-  }
-  function ambilTemplate() {
-    if (state.templates) return Promise.resolve(state.templates);
-    return api('daftarTemplate').then(function (t) { state.templates = t; return t; });
-  }
-  function templateJenis(list, jenis) {
-    var j = String(jenis || '').toLowerCase().trim();
-    return list.filter(function (t) { return t.jenis.toLowerCase().trim() === j; })[0] || list.filter(function (t) { return t.jenis === 'Umum'; })[0];
-  }
   function textareaFields(list, n) {
     return list.map(function (f) {
       return field(f[1], '<textarea name="' + f[0] + '" rows="' + f[2] + '">' + esc(n[f[0]]) + '</textarea>', f[3]);
@@ -654,6 +601,12 @@
   function tabNotulen(d) {
     var n = Object.assign({}, d.notulen || {}), kid = d.kegiatan.id;
     var rtl = (d.rtl || []).slice();
+    // isian bawaan pimpinan rapat & notulis (menu Pengaturan)
+    var pg = d.pengaturan || {};
+    if (!n.pimpinanRapat && !n.notulis) {
+      n.pimpinanRapat = pg.pimpinanNama; n.nipPimpinan = pg.pimpinanNip; n.jabatanPimpinan = pg.pimpinanJabatan;
+      n.notulis = pg.notulisNama; n.nipNotulis = pg.notulisNip; n.jabatanNotulis = pg.notulisJabatan;
+    }
     var draft = lsGet('sirapat_draft_' + kid, null);
     var savedT = n.diubahPada ? Date.parse(String(n.diubahPada).replace(' ', 'T') + '+08:00') || 0 : 0;
     if (draft && draft.t > savedT) {
@@ -670,49 +623,19 @@
       '<span></span>' +
       field('Nama Notulis', '<input name="notulis" value="' + esc(n.notulis) + '">') +
       field('NIP Notulis', '<input name="nipNotulis" inputmode="numeric" value="' + esc(n.nipNotulis) + '">') +
-      '</div><h3 class="sect">Isi Notulen</h3>' + textareaFields(NOTULEN_FIELDS, n) +
+      field('Jabatan Notulis', '<input name="jabatanNotulis" placeholder="mis. Sekretaris Jurusan Gizi" value="' + esc(n.jabatanNotulis) + '">') +
+      '</div><p class="muted small">Terisi otomatis dari menu Pengaturan; ubah bila rapat dipimpin/dinotulis orang lain.</p><h3 class="sect">Isi Notulen</h3>' + textareaFields(NOTULEN_FIELDS, n) +
       '<h3 class="sect">Rencana Tindak Lanjut (RTL) <span class="tag">Penetapan</span></h3>' +
       '<p class="muted small">RTL akan dievaluasi pada rapat berikutnya melalui menu <b>Evaluasi RTL</b>.</p>' +
       '<div id="rtlList" class="rtl-list"></div>' +
       '<button type="button" class="btn sm" id="btnTambahRtl">＋ Tambah RTL</button>' +
-      '<h3 class="sect">Penutup</h3>' + textareaFields(NOTULEN_FIELDS_2, n) +
-      '<details class="lapbox"' + (n.latarBelakang || n.dasarPelaksanaan || n.tujuan ? ' open' : '') + '><summary><b>Bagian Laporan</b> <span class="tag">opsional</span>' +
-      '<small>Latar belakang, dasar pelaksanaan, tujuan & kata pengantar. Jika kosong, laporan otomatis memakai <a href="#/template">Template Laporan</a> jenis “' + esc(d.kegiatan.jenis || 'Umum') + '”.</small></summary>' +
-      '<div class="btnrow left"><button type="button" class="btn sm" id="btnIsiTpl">📄 Isi dari template</button>' +
-      '<button type="button" class="btn sm" id="btnSalinSblm">↩ Salin dari rapat sebelumnya</button></div>' +
-      textareaFields(LAPORAN_FIELDS, n) + '</details>' +
       '<div class="actions sticky"><small class="muted" id="savedInfo">' + (n.diubahPada ? 'Tersimpan ' + esc(n.diubahPada) : 'Belum disimpan') + '</small>' +
       '<button class="btn primary" id="btnSN">Simpan Notulen & RTL</button></div></form>' +
-      '<div class="card"><div class="cardhead"><h3>Foto Dokumentasi</h3>' +
+      '<div class="card"><div class="cardhead"><h3>📷 Foto Dokumentasi <span class="tag">G</span></h3>' +
       '<label class="btn sm primary">＋ Tambah Foto<input type="file" accept="image/*" multiple hidden id="inFoto"></label></div>' +
       '<div id="fotoGrid" class="fotogrid"><div class="empty small">Memuat foto…</div></div></div>';
     renderRtl(rtl);
     var form = $('#fn');
-    function isiBagian(src, label) {
-      var ada = LAPORAN_FIELDS.some(function (f) { return form[f[0]].value.trim(); });
-      if (ada && !confirm('Isian Bagian Laporan yang sudah ada akan diganti dengan ' + label + '. Lanjutkan?')) return;
-      LAPORAN_FIELDS.forEach(function (f) { if (src[f[0]] != null) form[f[0]].value = src[f[0]]; });
-      form.oninput(); toast('Bagian Laporan diisi dari ' + label + '. Silakan periksa & sesuaikan.', 'ok');
-    }
-    $('#btnIsiTpl').onclick = function () {
-      var b = this; busy(b, true, 'Memuat…');
-      ambilTemplate().then(function (list) {
-        busy(b, false);
-        var t = templateJenis(list, d.kegiatan.jenis);
-        if (!t) return toast('Belum ada template. Buat di menu Template Laporan.', 'warn');
-        var hasil = {};
-        LAPORAN_FIELDS.forEach(function (f) { hasil[f[0]] = isiTemplate(t[f[0]], d.kegiatan, d.hadir.length); });
-        isiBagian(hasil, 'template “' + t.jenis + '”');
-      }).catch(function (e) { busy(b, false); toast(e.message, 'error'); });
-    };
-    $('#btnSalinSblm').onclick = function () {
-      var b = this; busy(b, true, 'Mencari…');
-      api('bagianLaporanSebelumnya', { kegiatanId: kid }).then(function (r) {
-        busy(b, false);
-        if (!r) return toast('Belum ada rapat sebelumnya berjenis “' + (d.kegiatan.jenis || '-') + '” yang Bagian Laporannya terisi.', 'warn');
-        isiBagian(r, '“' + r.dari.judul + '” (' + tgl(r.dari.tanggal) + ')');
-      }).catch(function (e) { busy(b, false); toast(e.message, 'error'); });
-    };
     form.oninput = function () {
       lsSet('sirapat_draft_' + kid, { t: Date.now(), data: formData(form), rtl: kumpulkanRtl() });
       $('#savedInfo').textContent = 'Ada perubahan belum disimpan';
@@ -851,9 +774,9 @@
         html += '</div>';
       });
       html += '<div class="card form"><h3>Penyusun Laporan Evaluasi</h3><div class="grid2">' +
-        field('Nama', '<input id="evPenyusun" value="' + esc(k.evPenyusun) + '">') +
-        field('NIP', '<input id="evNipPenyusun" inputmode="numeric" value="' + esc(k.evNipPenyusun) + '">') +
-        field('Jabatan', '<input id="evJabatanPenyusun" value="' + esc(k.evJabatanPenyusun || CFG.JABATAN_PENYUSUN) + '">') + '<span></span></div>' +
+        field('Nama', '<input id="evPenyusun" value="' + esc(k.evPenyusun || (d.pengaturan || {}).notulisNama) + '">') +
+        field('NIP', '<input id="evNipPenyusun" inputmode="numeric" value="' + esc(k.evNipPenyusun || (d.pengaturan || {}).notulisNip) + '">') +
+        field('Jabatan', '<input id="evJabatanPenyusun" value="' + esc(k.evJabatanPenyusun || (d.pengaturan || {}).notulisJabatan || CFG.JABATAN_PENYUSUN) + '">') + '<span></span></div>' +
         field('Kesimpulan evaluasi (opsional)', '<textarea id="evKesimpulan" rows="3" placeholder="Kosongkan agar dibuat otomatis dari capaian">' + esc(k.evKesimpulan) + '</textarea>') +
         '<div class="actions sticky"><button class="btn" id="btnLapEv">⬇ Laporan Evaluasi (Word)</button>' +
         '<button class="btn primary" id="btnSimpanEv">Simpan Evaluasi</button></div></div>';
@@ -959,33 +882,108 @@
     }).join('');
   }
 
-  // ---- Tab laporan ----
+  // ---- Tab Dokumen Rapat (U-A-N-G) ----
   function tabLaporan(d) {
     var n = d.notulen || {}, k = d.kegiatan;
-    var cek = [
-      ['Sampul (cover)', true], ['Lembar pengesahan', !!n.pimpinanRapat], ['Kata pengantar', true],
-      ['Daftar isi', true], ['BAB I Pendahuluan' + (n.latarBelakang ? '' : ' (dari template)'), true], ['BAB II Pelaksanaan', !!n.agenda || !!k.deskripsi],
-      ['BAB III Hasil kegiatan', !!n.pembahasan], ['Rencana tindak lanjut (' + (d.rtl || []).length + ' RTL)', (d.rtl || []).length > 0],
-      ['BAB IV Penutup', !!n.kesimpulan],
-      ['Lampiran 1 – Daftar hadir (' + d.hadir.length + ' orang)', d.hadir.length > 0],
-      ['Lampiran 2 – Notulen rapat', !!n.pembahasan], ['Lampiran 3 – Dokumentasi', !!n.fotoIds]
-    ];
-    var kurang = cek.filter(function (c) { return !c[1]; }).length;
     var adaEv = !!k.evaluasiDari;
     $('#tabBody').innerHTML =
-      '<div class="grid-side"><div class="card lap-preview">' + miniCover('LAPORAN ' + (k.jenis || 'Kegiatan').toUpperCase(), k.judul) + '</div>' +
-      '<div class="card"><h3>Laporan Kegiatan</h3><ul class="checklist">' +
-      cek.map(function (c) { return '<li class="' + (c[1] ? 'ok' : 'no') + '">' + (c[1] ? '✓' : '!') + ' ' + esc(c[0]) + '</li>'; }).join('') + '</ul>' +
-      (kurang ? '<p class="hint warn">' + kurang + ' bagian belum lengkap dan akan ditandai “(belum diisi)”. Lengkapi di tab <a href="#/kegiatan/' + esc(k.id) + '/notulen">Notulen & RTL</a>.</p>' : '<p class="hint ok">Semua bagian sudah terisi. 👍</p>') +
-      '<button class="btn primary block" id="btnLap">⬇ Unduh Laporan Kegiatan (Word)</button></div></div>' +
-      '<div class="grid-side"><div class="card lap-preview">' + miniCover('LAPORAN EVALUASI TINDAK LANJUT', 'Evaluasi RTL ' + k.judul) + '</div>' +
-      '<div class="card"><h3>Laporan Evaluasi Tindak Lanjut</h3>' +
-      '<p class="muted small">Berisi ringkasan capaian RTL, grafik status, rincian evaluasi per rapat, kendala & tindakan koreksi, RTL lanjutan, dan lampiran bukti dukung.</p>' +
-      (adaEv ? '<button class="btn primary block" id="btnLapEv2">⬇ Unduh Laporan Evaluasi RTL (Word)</button>'
-        : '<p class="hint warn">Belum ada evaluasi RTL pada rapat ini. Isi dulu di tab <a href="#/kegiatan/' + esc(k.id) + '/evaluasi">Evaluasi RTL</a>.</p>') +
-      '<p class="muted small">Saat dibuka di Microsoft Word, pilih <b>“Ya/Yes”</b> bila diminta memperbarui field agar nomor halaman daftar isi akurat.</p></div></div>';
+      '<div class="uang">' +
+      '<div class="card u-item"><div class="u-head"><span class="u-huruf">U</span><div><h3>Undangan</h3><small id="infoUnd">Memuat…</small></div>' +
+      '<label class="btn sm primary">📨 Unggah Undangan<input type="file" hidden accept="image/*,application/pdf" multiple id="inUnd"></label></div>' +
+      '<p class="muted small">Foto/scan (JPG, PNG) atau <b>PDF</b> undangan resmi. PDF otomatis diubah menjadi gambar per halaman.</p>' +
+      '<div id="gridUnd" class="und-grid"></div></div>' +
+      '<div class="card u-item"><div class="u-head"><span class="u-huruf">A</span><div><h3>Absen / Daftar Hadir</h3><small>' + d.hadir.length + ' peserta bertanda tangan</small></div>' +
+      '<a class="btn sm ghost" href="#/kegiatan/' + esc(k.id) + '/hadir">Lihat</a></div></div>' +
+      '<div class="card u-item"><div class="u-head"><span class="u-huruf">N</span><div><h3>Notulen</h3><small>' +
+      (n.pembahasan ? 'Terisi · ' + (d.rtl || []).length + ' RTL' : '<span class="warn-t">Belum diisi</span>') + '</small></div>' +
+      '<a class="btn sm ghost" href="#/kegiatan/' + esc(k.id) + '/notulen">' + (n.pembahasan ? 'Ubah' : 'Isi') + '</a></div></div>' +
+      '<div class="card u-item"><div class="u-head"><span class="u-huruf">G</span><div><h3>Gambar / Foto Kegiatan</h3><small id="infoFoto">' +
+      (n.fotoIds ? String(n.fotoIds).split(',').filter(String).length + ' foto' : '<span class="warn-t">Belum ada foto</span>') + '</small></div>' +
+      '<a class="btn sm ghost" href="#/kegiatan/' + esc(k.id) + '/notulen">Kelola</a></div></div>' +
+      '</div>' +
+      '<div class="grid-side"><div class="card lap-preview">' + miniCover('DOKUMEN RAPAT', k.judul) + '</div>' +
+      '<div class="card"><h3>📄 Dokumen Rapat (Word)</h3>' +
+      '<p class="muted small">Sampul + <b>U</b>ndangan + <b>A</b>bsen + <b>N</b>otulen (dengan RTL) + <b>G</b>ambar kegiatan, dalam satu file .docx.</p>' +
+      '<div id="peringatan"></div>' +
+      '<button class="btn primary block" id="btnLap">⬇ Unduh Dokumen Rapat</button>' +
+      '<hr class="sep"><h3>🔁 Evaluasi Tindak Lanjut</h3>' +
+      '<p class="muted small">Ringkasan evaluasi RTL rapat sebelumnya (2–3 halaman) sebagai bukti siklus PPEPP.</p>' +
+      (adaEv ? '<button class="btn block" id="btnLapEv2">⬇ Unduh Evaluasi RTL</button>'
+        : '<p class="hint">Belum ada evaluasi RTL pada rapat ini. Isi di tab <a href="#/kegiatan/' + esc(k.id) + '/evaluasi">Evaluasi RTL</a>.</p>') +
+      '</div></div>';
     $('#btnLap').onclick = function () { buatLaporan(k.id, this); };
     if (adaEv) $('#btnLapEv2').onclick = function () { buatLaporanEvaluasi(k.id, this); };
+    var cekKurang = function (jmlUnd) {
+      var kurang = [];
+      if (!jmlUnd) kurang.push('Undangan belum diunggah');
+      if (!d.hadir.length) kurang.push('belum ada peserta di daftar hadir');
+      if (!n.pembahasan) kurang.push('notulen belum diisi');
+      if (!n.fotoIds) kurang.push('belum ada foto kegiatan');
+      $('#peringatan').innerHTML = kurang.length ? '<p class="hint warn">⚠ ' + kurang.join('; ') + '. Dokumen tetap bisa diunduh.</p>' : '<p class="hint ok">✓ Berkas UANG lengkap.</p>';
+    };
+    muatUndangan(k.id, cekKurang);
+    $('#inUnd').onchange = function () {
+      var files = Array.prototype.slice.call(this.files); this.value = '';
+      if (!files.length) return;
+      var chain = Promise.resolve(), total = 0;
+      files.forEach(function (f) {
+        chain = chain.then(function () {
+          var halaman = /pdf$/i.test(f.type) || /\.pdf$/i.test(f.name) ? pdfKeGambar(f) : kecilkanGambar(f, 2000, 0.88).then(function (x) { return [x]; });
+          toast('Memproses ' + f.name + '…');
+          return halaman.then(function (list) {
+            return list.reduce(function (p, dataUrl, i) {
+              return p.then(function () {
+                total++; toast('Mengunggah halaman undangan ' + total + '…');
+                return api('unggahUndangan', { kegiatanId: k.id, data: dataUrl, nama: f.name + (list.length > 1 ? ' (hal. ' + (i + 1) + ')' : '') });
+              });
+            }, Promise.resolve());
+          });
+        });
+      });
+      chain.then(function () { toast('Undangan berhasil diunggah (' + total + ' halaman).', 'ok'); muatUndangan(k.id, cekKurang); })
+        .catch(function (e) { toast(e.message, 'error'); muatUndangan(k.id, cekKurang); });
+    };
+  }
+  function muatUndangan(kid, cb) {
+    api('daftarUndangan', { kegiatanId: kid }).then(function (list) {
+      var g = $('#gridUnd'); if (!g) return;
+      $('#infoUnd').innerHTML = list.length ? list.length + ' halaman' : '<span class="warn-t">Belum diunggah</span>';
+      g.innerHTML = list.map(function (u, i) {
+        return '<figure><img src="data:' + esc(u.mime) + ';base64,' + u.data + '" alt=""><figcaption>Hal. ' + (i + 1) + '</figcaption>' +
+          '<button class="icon-btn" data-und="' + esc(u.id) + '" title="Hapus halaman">✕</button></figure>';
+      }).join('');
+      $$('[data-und]', g).forEach(function (b) {
+        b.onclick = function () {
+          if (!confirm('Hapus halaman undangan ini?')) return;
+          api('hapusUndangan', { kegiatanId: kid, fileId: b.dataset.und }).then(function () { muatUndangan(kid, cb); })
+            .catch(function (e) { toast(e.message, 'error'); });
+        };
+      });
+      if (cb) cb(list.length);
+    }).catch(function (e) { var g = $('#gridUnd'); if (g) g.innerHTML = '<div class="empty small">' + esc(e.message) + '</div>'; });
+  }
+  /** Ubah PDF undangan menjadi gambar JPEG per halaman (maks. 6 halaman) memakai pdf.js. */
+  function pdfKeGambar(file) {
+    var base = new URL('vendor/', location.href).href;
+    return import(base + 'pdf.min.mjs').then(function (pdfjs) {
+      pdfjs.GlobalWorkerOptions.workerSrc = base + 'pdf.worker.min.mjs';
+      return file.arrayBuffer().then(function (buf) { return pdfjs.getDocument({ data: buf }).promise; });
+    }).then(function (pdf) {
+      var jml = Math.min(pdf.numPages, 6), out = [], chain = Promise.resolve();
+      for (var i = 1; i <= jml; i++) (function (no) {
+        chain = chain.then(function () { return pdf.getPage(no); }).then(function (page) {
+          var vp1 = page.getViewport({ scale: 1 });
+          var vp = page.getViewport({ scale: 1600 / vp1.width });
+          var c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+          var ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+          return page.render({ canvasContext: ctx, viewport: vp }).promise.then(function () { out.push(c.toDataURL('image/jpeg', 0.88)); });
+        });
+      })(i);
+      return chain.then(function () {
+        if (pdf.numPages > 6) toast('PDF memiliki ' + pdf.numPages + ' halaman; hanya 6 halaman pertama yang dipakai.', 'warn');
+        return out;
+      });
+    }).catch(function (e) { throw new Error('Gagal membaca PDF: ' + e.message); });
   }
   function miniCover(kicker, judul) {
     return '<div class="mini-cover"><div class="mc-top"><small>' + esc(kicker) + '</small><b>' + esc(judul) + '</b></div>' +
@@ -1047,22 +1045,17 @@
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
   }
   function buatLaporan(id, btn) {
-    busy(btn, true, 'Menyusun laporan…');
+    busy(btn, true, 'Menyusun dokumen…');
     Promise.all([muatAset(), api('dataLaporan', { id: id })]).then(function (r) {
       var aset = r[0], data = r[1];
       data.notulen = data.notulen || {};
-      if (data.template) {
-        LAPORAN_FIELDS.forEach(function (f) {
-          if (!String(data.notulen[f[0]] || '').trim() && data.template[f[0]]) data.notulen[f[0]] = isiTemplate(data.template[f[0]], data.kegiatan, data.hadir.length);
-        });
-      }
-      return Promise.all(data.foto.map(function (f) {
+      return Promise.all(data.foto.concat(data.undangan || []).map(function (f) {
         return ukuranGambar('data:' + f.mime + ';base64,' + f.data).then(function (s) { f.w = s.w; f.h = s.h; });
       })).then(function () {
-        return window.docx.Packer.toBlob(window.Laporan.buildLaporan(window.docx, data, aset));
+        return window.docx.Packer.toBlob(window.Laporan.buildDokumenRapat(window.docx, data, aset));
       }).then(function (blob) {
-        unduh(blob, 'Laporan - ' + data.kegiatan.judul);
-        busy(btn, false); toast('Laporan kegiatan berhasil dibuat.', 'ok');
+        unduh(blob, 'Dokumen Rapat - ' + data.kegiatan.judul);
+        busy(btn, false); toast('Dokumen Rapat berhasil dibuat.', 'ok');
       });
     }).catch(function (e) { busy(btn, false); toast('Gagal membuat laporan: ' + e.message, 'error'); console.error(e); });
   }
@@ -1078,12 +1071,10 @@
           });
         });
       });
-      var g = window.Cover.grafikSvg(window.Laporan.dataGrafik(data));
-      tugas.push(svgToPng(g.svg, g.w, g.h).then(function (png) { aset = Object.assign({}, aset, { grafik: { data: png, w: g.w, h: g.h } }); }));
       return Promise.all(tugas).then(function () {
         return window.docx.Packer.toBlob(window.Laporan.buildLaporanEvaluasi(window.docx, data, aset));
       }).then(function (blob) {
-        unduh(blob, 'Laporan Evaluasi RTL - ' + data.kegiatan.judul);
+        unduh(blob, 'Evaluasi RTL - ' + data.kegiatan.judul);
         busy(btn, false); toast('Laporan evaluasi berhasil dibuat.', 'ok');
       });
     }).catch(function (e) { busy(btn, false); toast('Gagal membuat laporan evaluasi: ' + e.message, 'error'); console.error(e); });
