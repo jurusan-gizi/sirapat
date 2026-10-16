@@ -25,8 +25,8 @@ window.APP_CONFIG = {
   IKON_KOP: { pin: 'assets/ic-pin.png', phone: 'assets/ic-phone.png', web: 'assets/ic-web.png' },
 
   // Pilihan jenis kegiatan
-  JENIS_KEGIATAN: ['Rapat', 'Rapat Bulanan', 'Workshop', 'Pelatihan', 'Seminar', 'Sosialisasi', 'Lokakarya',
-    'Focus Group Discussion', 'Bimbingan Teknis', 'Kegiatan'],
+  JENIS_KEGIATAN: ['Rapat PBM', 'Rapat Evaluasi Kinerja', 'Rapat Pembentukan Panitia PKL/Rotasi', 'Rapat Insidentil',
+    'Workshop', 'Pelatihan', 'Seminar', 'Sosialisasi', 'Kegiatan Lainnya'],
 
   // Jabatan default penyusun laporan evaluasi RTL
   JABATAN_PENYUSUN: 'Sekretaris Jurusan'

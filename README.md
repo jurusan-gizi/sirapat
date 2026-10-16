@@ -4,6 +4,7 @@ Aplikasi PWA untuk **Poltekkes Kemenkes Makassar**. Aplikasi ini memuat:
 
 - **Admin** (login dengan email dan password yang terdaftar di sheet Admin, dikelola lewat menu **Kelola Admin**): membuat kegiatan, lalu otomatis mendapat **link dan QR code** form daftar hadir.
 - **Form daftar hadir** untuk peserta, tanpa perlu login. Peserta mengisi data dan **tanda tangan dengan mencoret layar** (HP) atau memakai mouse (laptop). Jika sinyal hilang, isian disimpan dulu dan dikirim otomatis saat online.
+- **Data Pegawai**: master nama, NIP, jabatan, dan unit dosen/tendik. Data bisa diimpor sekaligus dari Excel. Di form daftar hadir, peserta cukup mengetik sebagian nama atau NIP lalu **memilih**. Peserta yang tidak terdaftar tetap bisa **mengisi manual**. NIP di daftar pilihan tampil tersamar demi privasi.
 - **Notulen rapat**: pimpinan, notulis, latar belakang, agenda, pembahasan, keputusan, kesimpulan, saran, serta **foto dokumentasi**.
 - **Rencana Tindak Lanjut (RTL)** terstruktur: uraian, penanggung jawab, tenggat, dan target/indikator (*Penetapan*).
 - **Evaluasi RTL** di rapat berikutnya. Admin bisa memilih **beberapa rapat sebelumnya** sekaligus, misalnya dua rapat bulanan. Isinya status (Selesai/Proses/Belum/Tidak relevan), % capaian, bukti (tautan/berkas), kendala, tindakan koreksi, dan opsi **melanjutkan RTL** yang belum tuntas ke rapat ini. Dengan begitu siklus **PPEPP** berjalan.
@@ -80,6 +81,9 @@ apps-script/Code.gs, appsscript.json      → backend (salin ke Apps Script)
 ---
 
 ## Cara pakai
+
+0. **Template Laporan (sekali di awal)**: buka menu nama Anda → **Template Laporan**. Sudah tersedia template awal untuk *Rapat PBM, Rapat Evaluasi Kinerja, Rapat Pembentukan Panitia PKL/Rotasi, Rapat Insidentil,* dan *Umum*. Periksa dan sesuaikan isinya, terutama **dasar hukum**. Jika Latar Belakang, Dasar, Tujuan, atau Kata Pengantar dikosongkan di notulen, laporan otomatis memakai template sesuai jenis kegiatan. Di form notulen juga tersedia tombol **Isi dari template** dan **Salin dari rapat sebelumnya**.
+0. **Data Pegawai (sekali di awal)**: buka menu nama Anda → **Data Pegawai** → **Impor dari Excel**. Blok kolom *Nama | NIP | Jabatan | Unit Kerja | No HP* di Excel, salin, tempel, lalu klik **Impor**. Peserta yang mengisi manual bisa ditambahkan ke Data Pegawai lewat tombol **＋ Data Pegawai** di daftar hadir.
 
 1. **Login**, lalu pilih **＋ Kegiatan Baru**. Isi judul, tanggal, waktu, dan tempat, lalu Simpan.
 2. Di tab **Daftar Hadir**, bagikan link atau QR lewat WhatsApp, atau pilih **Tampilkan di Layar** untuk menayangkan QR besar di proyektor. Daftar peserta diperbarui otomatis setiap 20 detik.

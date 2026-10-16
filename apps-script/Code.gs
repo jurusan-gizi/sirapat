@@ -10,7 +10,7 @@
  */
 
 // ====== KONFIGURASI ======
-var VERSI = '3.1';              // versi backend (tampil di URL /exec untuk pengecekan)
+var VERSI = '3.3';              // versi backend (tampil di URL /exec untuk pengecekan)
 var SESI_DETIK = 6 * 3600;      // lama sesi login admin (maks. 6 jam – batas CacheService)
 var MAKS_GAGAL = 5;             // percobaan login salah sebelum dikunci sementara
 var KUNCI_DETIK = 15 * 60;      // lama penguncian setelah terlalu banyak gagal
@@ -24,7 +24,11 @@ var SHEETS = {
              // evaluasi RTL (PPEPP)
              'evaluasiDari', 'evPenyusun', 'evNipPenyusun', 'evJabatanPenyusun', 'evKesimpulan'],
   Hadir: ['id', 'kegiatanId', 'waktu', 'nama', 'nipNim', 'jabatan', 'unitKerja', 'noHp',
-          'ttdFileId'],
+          'ttdFileId', 'pegawaiId'],
+  // Template bagian laporan per jenis kegiatan (latar belakang, dasar, tujuan, kata pengantar)
+  Template: ['jenis', 'latarBelakang', 'dasarPelaksanaan', 'tujuan', 'kataPengantar', 'diubahOleh', 'diubahPada'],
+  // Master data dosen/tendik untuk pilihan cepat di form daftar hadir
+  Pegawai: ['id', 'nama', 'nip', 'jabatan', 'unitKerja', 'noHp', 'aktif', 'dibuatPada', 'diubahPada'],
   Notulen: ['kegiatanId', 'latarBelakang', 'dasarPelaksanaan', 'tujuan', 'agenda',
             'pembahasan', 'keputusan', 'tindakLanjut', 'kesimpulan', 'saran',
             'kataPengantar', 'pimpinanRapat', 'nipPimpinan', 'jabatanPimpinan',
@@ -153,6 +157,7 @@ function doPost(e) {
     var publicActions = {
       getKegiatanPublik: getKegiatanPublik_,
       kirimHadir: kirimHadir_,
+      cariPegawai: cariPegawai_,
       login: login_
     };
     var adminActions = {
@@ -162,6 +167,13 @@ function doPost(e) {
       daftarAdmin: daftarAdmin_,
       simpanAdmin: simpanAdmin_,
       resetPasswordAdmin: resetPasswordAdmin_,
+      daftarPegawai: daftarPegawai_,
+      simpanPegawai: simpanPegawai_,
+      hapusPegawai: hapusPegawai_,
+      imporPegawai: imporPegawai_,
+      daftarTemplate: daftarTemplate_,
+      simpanTemplate: simpanTemplate_,
+      bagianLaporanSebelumnya: bagianLaporanSebelumnya_,
       daftarKegiatan: daftarKegiatan_,
       simpanKegiatan: simpanKegiatan_,
       hapusKegiatan: hapusKegiatan_,
@@ -366,7 +378,7 @@ function rows_(name) {
   return values.map(function (r, i) {
     var o = { _row: i + 2 };
     SHEETS[name].forEach(function (h) { o[h] = ''; });
-    head.forEach(function (h, j) { if (h) o[h] = r[j] instanceof Date ? fmtDate_(r[j]) : String(r[j]); });
+    head.forEach(function (h, j) { if (h) o[h] = nilai_(r[j]); });
     return o;
   });
 }
@@ -376,14 +388,33 @@ function deleteRows_(name, list) {
     .forEach(function (r) { sh.deleteRow(r._row); });
 }
 function fmtDate_(d) { return Utilities.formatDate(d, 'Asia/Makassar', 'yyyy-MM-dd'); }
+/** Nilai sel → teks. Sel yang terlanjur diubah Sheets menjadi tanggal/jam dikembalikan ke format aslinya. */
+function nilai_(v) {
+  if (v instanceof Date) {
+    if (v.getFullYear() < 1901) return Utilities.formatDate(v, zonaSheet_(), 'HH:mm');     // jam (mis. 09:00)
+    var jam = Utilities.formatDate(v, 'Asia/Makassar', 'HH:mm:ss');
+    return jam === '00:00:00' ? fmtDate_(v) : Utilities.formatDate(v, 'Asia/Makassar', 'yyyy-MM-dd HH:mm:ss');
+  }
+  if (typeof v === 'number' && Math.abs(v) >= 1e15) return v.toFixed(0);                   // NIP panjang
+  return String(v);
+}
+var _zona = null;
+function zonaSheet_() {
+  if (!_zona) { try { _zona = ss_().getSpreadsheetTimeZone(); } catch (e) { _zona = 'Asia/Makassar'; } }
+  return _zona;
+}
+function barisTeks_(name, obj) {
+  return SHEETS[name].map(function (h) { return obj[h] == null ? '' : String(obj[h]); });
+}
+/** Tulis baris sebagai TEKS agar jam, tanggal & NIP tidak diubah otomatis oleh Google Sheets. */
 function appendRow_(name, obj) {
   var sh = sheet_(name);
-  sh.appendRow(SHEETS[name].map(function (h) { return obj[h] == null ? '' : String(obj[h]); }));
+  var r = sh.getLastRow() + 1;
+  sh.getRange(r, 1, 1, SHEETS[name].length).setNumberFormat('@').setValues([barisTeks_(name, obj)]);
 }
 function updateRow_(name, rowNum, obj) {
   var sh = sheet_(name);
-  sh.getRange(rowNum, 1, 1, SHEETS[name].length)
-    .setValues([SHEETS[name].map(function (h) { return obj[h] == null ? '' : String(obj[h]); })]);
+  sh.getRange(rowNum, 1, 1, SHEETS[name].length).setNumberFormat('@').setValues([barisTeks_(name, obj)]);
 }
 function uid_() { return Utilities.getUuid().replace(/-/g, '').slice(0, 12); }
 function now_() { return Utilities.formatDate(new Date(), 'Asia/Makassar', "yyyy-MM-dd HH:mm:ss"); }
@@ -404,6 +435,15 @@ function getKegiatanPublik_(p) {
 }
 
 function kirimHadir_(p) {
+  // Peserta memilih dari Data Pegawai → nama & NIP diambil dari master (NIP tidak dikirim ke browser utuh)
+  if (p.pegawaiId) {
+    var pg = rows_('Pegawai').filter(function (r) { return r.id === p.pegawaiId && r.aktif !== 'tidak'; })[0];
+    if (pg) {
+      p.nama = pg.nama; p.nipNim = pg.nip;
+      p.jabatan = clean_(p.jabatan) || pg.jabatan; p.unitKerja = clean_(p.unitKerja) || pg.unitKerja;
+      p.noHp = clean_(p.noHp) || pg.noHp;
+    } else { p.pegawaiId = ''; }
+  }
   var nama = clean_(p.nama, 120);
   if (!nama) throw new Error('Nama wajib diisi.');
   if (!p.ttd || p.ttd.indexOf('data:image/png;base64,') !== 0) throw new Error('Tanda tangan wajib diisi.');
@@ -428,7 +468,7 @@ function kirimHadir_(p) {
     appendRow_('Hadir', {
       id: id, kegiatanId: k.id, waktu: now_(), nama: nama, nipNim: nip,
       jabatan: clean_(p.jabatan, 120), unitKerja: clean_(p.unitKerja, 160),
-      noHp: clean_(p.noHp, 30), ttdFileId: file.getId()
+      noHp: clean_(p.noHp, 30), ttdFileId: file.getId(), pegawaiId: clean_(p.pegawaiId, 20)
     });
     return { id: id, nama: nama };
   });
@@ -580,6 +620,7 @@ function dataLaporan_(p) {
     h.ttd = fileB64_(h.ttdFileId);
   });
   d.foto = daftarFoto_({ kegiatanId: p.id });
+  d.template = templateUntuk_(d.kegiatan.jenis);
   var ev = dataEvaluasi_({ kegiatanId: p.id });
   d.evaluasi = ev.sumber.length ? ev : null;
   return d;
@@ -791,4 +832,188 @@ function dataLaporanEvaluasi_(p) {
     });
   });
   return d;
+}
+
+// ====== DATA PEGAWAI (master nama & NIP dosen/tendik) ======
+function normal_(t) { return String(t || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+function samarNip_(nip) {
+  nip = String(nip || '').replace(/\s/g, '');
+  if (nip.length <= 8) return nip ? nip.slice(0, 2) + '••••' : '';
+  return nip.slice(0, 4) + '••••••' + nip.slice(-4);
+}
+/** Daftar pegawai aktif (disimpan di cache 10 menit agar pencarian cepat). */
+function pegawaiAktif_() {
+  var cache = CacheService.getScriptCache();
+  var c = cache.get('pegawai_aktif');
+  if (c) return JSON.parse(c);
+  var list = rows_('Pegawai').filter(function (r) { return r.aktif !== 'tidak' && r.nama; })
+    .map(function (r) { return { id: r.id, nama: r.nama, nip: r.nip, jabatan: r.jabatan, unitKerja: r.unitKerja }; });
+  try { cache.put('pegawai_aktif', JSON.stringify(list), 600); } catch (e) {}
+  return list;
+}
+function resetCachePegawai_() { CacheService.getScriptCache().remove('pegawai_aktif'); }
+
+/**
+ * PUBLIK – pencarian untuk form daftar hadir. Minimal 3 huruf / 4 angka, maks. 8 hasil,
+ * NIP ditampilkan tersamar agar data pegawai tidak bisa disalin utuh oleh orang luar.
+ */
+function cariPegawai_(p) {
+  var q = normal_(p.q);
+  if (q.length < 3) return [];
+  var kata = String(p.q || '').toLowerCase().split(/\s+/).map(normal_).filter(String);
+  var hasil = pegawaiAktif_().filter(function (r) {
+    var nn = normal_(r.nama), nip = normal_(r.nip);
+    if (/^\d+$/.test(q)) return q.length >= 4 && nip.indexOf(q) >= 0;
+    return kata.every(function (k) { return nn.indexOf(k) >= 0; });
+  }).slice(0, 8);
+  return hasil.map(function (r) {
+    return { id: r.id, nama: r.nama, nipSamar: samarNip_(r.nip), jabatan: r.jabatan, unitKerja: r.unitKerja };
+  });
+}
+
+function daftarPegawai_() {
+  return rows_('Pegawai').map(function (r) { delete r._row; return r; })
+    .sort(function (a, b) { return a.nama.localeCompare(b.nama); });
+}
+
+function dataPegawai_(p, lama) {
+  var d = lama ? Object.assign({}, lama) : { id: uid_(), dibuatPada: now_() };
+  d.nama = clean_(p.nama, 120); d.nip = clean_(p.nip, 40).replace(/\s/g, '');
+  d.jabatan = clean_(p.jabatan, 120); d.unitKerja = clean_(p.unitKerja, 160);
+  d.noHp = clean_(p.noHp, 30); d.aktif = p.aktif === false || p.aktif === 'tidak' ? 'tidak' : 'ya';
+  d.diubahPada = now_();
+  if (!d.nama) throw new Error('Nama pegawai wajib diisi.');
+  return d;
+}
+
+function simpanPegawai_(p) {
+  return withLock_(function () {
+    var semua = rows_('Pegawai');
+    var lama = p.id && semua.filter(function (r) { return r.id === p.id; })[0];
+    var d = dataPegawai_(p, lama);
+    var dupNip = d.nip && semua.filter(function (r) { return r.nip === d.nip && r.id !== d.id; })[0];
+    if (dupNip) throw new Error('NIP ' + d.nip + ' sudah terdaftar atas nama ' + dupNip.nama + '.');
+    if (lama) updateRow_('Pegawai', lama._row, d); else appendRow_('Pegawai', d);
+    resetCachePegawai_();
+    delete d._row;
+    return d;
+  });
+}
+
+function hapusPegawai_(p) {
+  return withLock_(function () {
+    var r = rows_('Pegawai').filter(function (x) { return x.id === p.id; })[0];
+    if (!r) throw new Error('Data tidak ditemukan.');
+    deleteRows_('Pegawai', [r]);
+    resetCachePegawai_();
+    return true;
+  });
+}
+
+/** Impor banyak pegawai sekaligus (dari salin-tempel Excel). Data dengan NIP sama diperbarui. */
+function imporPegawai_(p) {
+  return withLock_(function () {
+    var semua = rows_('Pegawai');
+    var tambah = 0, ubah = 0, lewat = 0;
+    (p.items || []).slice(0, 2000).forEach(function (it) {
+      if (!clean_(it.nama)) { lewat++; return; }
+      var nip = clean_(it.nip, 40).replace(/\s/g, '');
+      var lama = semua.filter(function (r) {
+        return nip ? r.nip === nip : normal_(r.nama) === normal_(it.nama);
+      })[0];
+      if (lama && lama._row < 0) { lewat++; return; }   // duplikat di dalam data impor
+      var d = dataPegawai_(it, lama);
+      if (lama) { updateRow_('Pegawai', lama._row, d); ubah++; }
+      else { appendRow_('Pegawai', d); d._row = -1; semua.push(d); tambah++; }
+    });
+    resetCachePegawai_();
+    return { tambah: tambah, ubah: ubah, lewat: lewat };
+  });
+}
+
+// ====== TEMPLATE LAPORAN ======
+// Isian otomatis: {judul} {jenis} {hari_tanggal} {tanggal} {bulan} {tahun} {tempat} {penyelenggara} {jumlah_peserta}
+var TEMPLATE_AWAL = [
+  { jenis: 'Rapat PBM',
+    latarBelakang: 'Proses belajar mengajar (PBM) merupakan kegiatan inti dalam penyelenggaraan pendidikan tinggi yang mutunya harus dipantau dan dievaluasi secara berkala sesuai Sistem Penjaminan Mutu Internal (SPMI).\n' +
+      'Pelaksanaan PBM pada setiap semester perlu dikoordinasikan agar jadwal perkuliahan, praktikum, dan penilaian berjalan sesuai kalender akademik, Rencana Pembelajaran Semester (RPS), serta capaian pembelajaran lulusan yang telah ditetapkan.\n' +
+      'Berdasarkan hal tersebut, {penyelenggara} menyelenggarakan {judul} pada {hari_tanggal} bertempat di {tempat} untuk membahas pelaksanaan, kendala, dan perbaikan PBM.',
+    dasarPelaksanaan: '1. Undang-Undang Nomor 12 Tahun 2012 tentang Pendidikan Tinggi\n2. Peraturan Menteri Pendidikan, Kebudayaan, Riset, dan Teknologi Nomor 53 Tahun 2023 tentang Penjaminan Mutu Pendidikan Tinggi\n3. Kalender Akademik Poltekkes Kemenkes Makassar Tahun Akademik berjalan\n4. Undangan rapat dari Ketua Jurusan',
+    tujuan: '- Mengevaluasi pelaksanaan PBM (perkuliahan, praktikum, dan penilaian) pada periode berjalan\n- Mengidentifikasi kendala pelaksanaan PBM beserta solusinya\n- Menyepakati rencana tindak lanjut perbaikan mutu pembelajaran',
+    kataPengantar: '' },
+  { jenis: 'Rapat Evaluasi Kinerja',
+    latarBelakang: 'Pengelolaan kinerja merupakan bagian penting dalam mewujudkan organisasi yang akuntabel dan berorientasi pada hasil. Capaian kinerja unit dan pegawai perlu dipantau secara berkala agar target yang telah ditetapkan dalam perjanjian kinerja dapat tercapai.\n' +
+      'Evaluasi kinerja juga menjadi sarana untuk mengidentifikasi hambatan, menetapkan langkah perbaikan, serta menyiapkan bahan pelaporan kinerja institusi.\n' +
+      'Sehubungan dengan hal tersebut, {penyelenggara} melaksanakan {judul} pada {hari_tanggal} bertempat di {tempat}.',
+    dasarPelaksanaan: '1. Peraturan Pemerintah Nomor 30 Tahun 2019 tentang Penilaian Kinerja Pegawai Negeri Sipil\n2. Peraturan Menteri PANRB Nomor 6 Tahun 2022 tentang Pengelolaan Kinerja Pegawai Aparatur Sipil Negara\n3. Perjanjian Kinerja Poltekkes Kemenkes Makassar tahun {tahun}\n4. Undangan rapat dari Ketua Jurusan',
+    tujuan: '- Mengevaluasi capaian kinerja unit dan pegawai terhadap target yang telah ditetapkan\n- Mengidentifikasi kendala pencapaian kinerja serta upaya perbaikannya\n- Menetapkan rencana tindak lanjut peningkatan kinerja periode berikutnya',
+    kataPengantar: '' },
+  { jenis: 'Rapat Pembentukan Panitia PKL/Rotasi',
+    latarBelakang: 'Praktik Kerja Lapangan (PKL) dan rotasi klinik merupakan bagian dari kurikulum yang memberikan pengalaman belajar langsung kepada mahasiswa di lahan praktik, sehingga mahasiswa mampu menerapkan pengetahuan dan keterampilan sesuai capaian pembelajaran.\n' +
+      'Agar pelaksanaan PKL/rotasi berjalan tertib, efektif, dan terkoordinasi dengan lahan praktik, diperlukan panitia pelaksana dengan pembagian tugas yang jelas, termasuk penetapan pembimbing, jadwal, dan lahan praktik.\n' +
+      'Oleh karena itu, {penyelenggara} menyelenggarakan {judul} pada {hari_tanggal} bertempat di {tempat}.',
+    dasarPelaksanaan: '1. Kurikulum Program Studi yang berlaku\n2. Pedoman Praktik Kerja Lapangan / Rotasi Klinik Jurusan\n3. Perjanjian kerja sama dengan institusi lahan praktik\n4. Undangan rapat dari Ketua Jurusan',
+    tujuan: '- Membentuk panitia pelaksana PKL/rotasi beserta pembagian tugasnya\n- Menetapkan jadwal, lahan praktik, dan pembimbing\n- Menyepakati persiapan administrasi dan koordinasi dengan lahan praktik',
+    kataPengantar: '' },
+  { jenis: 'Rapat Insidentil',
+    latarBelakang: 'Dalam penyelenggaraan kegiatan akademik dan administrasi, terdapat hal-hal yang memerlukan pembahasan dan pengambilan keputusan segera di luar jadwal rapat rutin.\n' +
+      'Sehubungan dengan hal tersebut, {penyelenggara} menyelenggarakan {judul} pada {hari_tanggal} bertempat di {tempat} untuk membahas dan menyepakati langkah penanganan yang diperlukan.',
+    dasarPelaksanaan: '1. Kebutuhan koordinasi mendesak di lingkungan {penyelenggara}\n2. Undangan rapat dari Ketua Jurusan',
+    tujuan: '- Membahas permasalahan yang memerlukan penanganan segera\n- Menetapkan keputusan dan pembagian tugas tindak lanjut',
+    kataPengantar: '' },
+  { jenis: 'Umum',
+    latarBelakang: '{judul} diselenggarakan oleh {penyelenggara} sebagai bagian dari upaya peningkatan mutu penyelenggaraan pendidikan dan tata kelola di lingkungan Poltekkes Kemenkes Makassar. Kegiatan dilaksanakan pada {hari_tanggal} bertempat di {tempat}.',
+    dasarPelaksanaan: '1. Program kerja {penyelenggara} tahun {tahun}\n2. Undangan kegiatan',
+    tujuan: '- Melaksanakan {judul} sesuai rencana\n- Menghasilkan kesepakatan dan rencana tindak lanjut',
+    kataPengantar: '' }
+];
+
+function semuaTemplate_() {
+  var rows = rows_('Template');
+  if (!rows.length) {   // isi template awal saat pertama kali dipakai
+    TEMPLATE_AWAL.forEach(function (t) { appendRow_('Template', Object.assign({ diubahPada: now_() }, t)); });
+    _sheetCache = {};
+    rows = rows_('Template');
+  }
+  return rows.map(function (r) { delete r._row; return r; });
+}
+function templateUntuk_(jenis) {
+  var all = semuaTemplate_();
+  var j = String(jenis || '').toLowerCase().trim();
+  return all.filter(function (t) { return t.jenis.toLowerCase().trim() === j; })[0] ||
+    all.filter(function (t) { return t.jenis === 'Umum'; })[0] || null;
+}
+function daftarTemplate_() { return semuaTemplate_(); }
+
+function simpanTemplate_(p, user) {
+  var jenis = clean_(p.jenis, 120);
+  if (!jenis) throw new Error('Nama jenis kegiatan wajib diisi.');
+  return withLock_(function () {
+    semuaTemplate_();
+    var row = rows_('Template').filter(function (t) { return t.jenis.toLowerCase() === jenis.toLowerCase(); })[0];
+    var d = { jenis: row ? row.jenis : jenis, latarBelakang: clean_(p.latarBelakang, 20000), dasarPelaksanaan: clean_(p.dasarPelaksanaan, 10000),
+      tujuan: clean_(p.tujuan, 10000), kataPengantar: clean_(p.kataPengantar, 20000), diubahOleh: user.email, diubahPada: now_() };
+    if (p.hapus) { if (row) deleteRows_('Template', [row]); return true; }
+    if (row) updateRow_('Template', row._row, d); else appendRow_('Template', d);
+    return d;
+  });
+}
+
+/** Bagian laporan dari rapat sebelumnya yang jenisnya sama (untuk tombol "Salin dari rapat sebelumnya"). */
+function bagianLaporanSebelumnya_(p) {
+  var keg = rows_('Kegiatan');
+  var k = keg.filter(function (r) { return r.id === p.kegiatanId; })[0];
+  if (!k) throw new Error('Kegiatan tidak ditemukan.');
+  var notulen = rows_('Notulen');
+  var kandidat = keg.filter(function (r) {
+    return r.id !== k.id && r.jenis === k.jenis && r.tanggal <= k.tanggal;
+  }).sort(function (a, b) { return b.tanggal.localeCompare(a.tanggal); });
+  for (var i = 0; i < kandidat.length; i++) {
+    var n = notulen.filter(function (x) { return x.kegiatanId === kandidat[i].id; })[0];
+    if (n && (n.latarBelakang || n.dasarPelaksanaan || n.tujuan)) {
+      return { dari: { judul: kandidat[i].judul, tanggal: kandidat[i].tanggal },
+        latarBelakang: n.latarBelakang, dasarPelaksanaan: n.dasarPelaksanaan, tujuan: n.tujuan, kataPengantar: n.kataPengantar };
+    }
+  }
+  return null;
 }

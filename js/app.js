@@ -78,7 +78,7 @@
       '<span class="uname">' + esc(u.nama) + '</span><span class="caret">▾</span></button>' +
       '<div class="menu" id="menuUser" hidden><div class="menu-head"><b>' + esc(u.nama) + '</b><small>' + esc(u.email) + '</small>' +
       '<span class="tag">' + (u.peran === 'superadmin' ? 'Superadmin' : 'Admin') + '</span></div>' +
-      '<a href="#/">🏠 Beranda</a><a href="#/akun">🔑 Ganti Password</a>' +
+      '<a href="#/">🏠 Beranda</a><a href="#/pegawai">📇 Data Pegawai</a><a href="#/template">📝 Template Laporan</a><a href="#/akun">🔑 Ganti Password</a>' +
       (u.peran === 'superadmin' ? '<a href="#/admin">👥 Kelola Admin</a>' : '') +
       '<button id="btnLogout">↩ Keluar</button></div></div>';
     var menu = $('#menuUser');
@@ -100,6 +100,8 @@
     if (state.user.wajibGanti) return viewAkun(true);
     if (parts[0] === 'akun') return viewAkun(false);
     if (parts[0] === 'admin') return viewKelolaAdmin();
+    if (parts[0] === 'pegawai') return viewPegawai();
+    if (parts[0] === 'template') return viewTemplate(decodeURIComponent(parts[1] || ''));
     if (parts[0] === 'kegiatan' && parts[1] === 'baru') return viewFormKegiatan(null);
     if (parts[0] === 'kegiatan' && parts[1] && parts[2] === 'edit') return viewFormKegiatan(parts[1]);
     if (parts[0] === 'kegiatan' && parts[1]) return viewDetail(parts[1], parts[2] || 'hadir');
@@ -250,6 +252,159 @@
     $('#tutupPw').onclick = function () { ov.remove(); };
   }
 
+  // ================= View: Template Laporan =================
+  function viewTemplate(pilih) {
+    $app.innerHTML = '<a class="back" href="#/">← Beranda</a>' +
+      '<div class="pagehead"><div><p class="eyebrow">Pengaturan laporan</p><h2>Template Laporan</h2>' +
+      '<p class="muted small">Dipakai otomatis untuk Latar Belakang, Dasar Pelaksanaan, Tujuan & Kata Pengantar bila bagian itu dikosongkan di notulen.</p></div></div>' +
+      '<div id="tplBody"><div class="loader"><span></span></div></div>';
+    state.templates = null;
+    ambilTemplate().then(function (list) {
+      var jenisAda = list.map(function (t) { return t.jenis; });
+      var semua = jenisAda.concat(CFG.JENIS_KEGIATAN.filter(function (j) { return jenisAda.map(function (x) { return x.toLowerCase(); }).indexOf(j.toLowerCase()) < 0; }));
+      pilih = pilih || jenisAda[0] || 'Umum';
+      var t = list.filter(function (x) { return x.jenis === pilih; })[0] || { jenis: pilih };
+      $('#tplBody').innerHTML =
+        '<div class="chips">' + semua.map(function (j) {
+          var punya = jenisAda.indexOf(j) >= 0;
+          return '<a class="chip-j' + (j === pilih ? ' on' : '') + (punya ? '' : ' kosong') + '" href="#/template/' + encodeURIComponent(j) + '">' + esc(j) + (punya ? '' : ' ＋') + '</a>';
+        }).join('') + '<button class="chip-j kosong" id="btnJenisBaru">＋ Jenis lain…</button></div>' +
+        '<form class="card form" id="fTpl"><h3>' + esc(pilih) + (pilih === 'Umum' ? ' <span class="tag">dipakai bila jenis kegiatan tidak punya template</span>' : '') + '</h3>' +
+        '<p class="hint">Isian otomatis yang bisa dipakai: <code>{judul}</code> <code>{jenis}</code> <code>{hari_tanggal}</code> <code>{tanggal}</code> <code>{bulan}</code> <code>{tahun}</code> ' +
+        '<code>{tempat}</code> <code>{penyelenggara}</code> <code>{jumlah_peserta}</code>. Satu baris = satu paragraf; awali “1. ” untuk penomoran, “- ” untuk poin.</p>' +
+        LAPORAN_FIELDS.map(function (f) {
+          return field(f[1], '<textarea name="' + f[0] + '" rows="' + (f[0] === 'latarBelakang' ? 8 : 5) + '">' + esc(t[f[0]]) + '</textarea>', f[0] === 'kataPengantar' ? 'Kosongkan untuk memakai kata pengantar bawaan aplikasi.' : '');
+        }).join('') +
+        '<details class="lapbox"><summary><b>Pratinjau</b> <small>contoh hasil dengan data rapat fiktif</small></summary><div id="prevTpl" class="preview"></div></details>' +
+        '<div class="actions sticky">' + (pilih !== 'Umum' && t.latarBelakang !== undefined ? '<button type="button" class="btn danger ghost" id="btnHapusTpl">Hapus template</button>' : '<span></span>') +
+        '<button class="btn primary" id="btnSimpanTpl">Simpan Template</button></div></form>';
+      var f = $('#fTpl');
+      var contoh = { judul: pilih + ' Bulan Oktober 2026', jenis: pilih, tanggal: '2026-10-16', tempat: 'Ruang Rapat Jurusan Gizi', penyelenggara: 'Jurusan Gizi' };
+      var pratinjau = function () {
+        $('#prevTpl').innerHTML = LAPORAN_FIELDS.map(function (x) {
+          var v = isiTemplate(f[x[0]].value, contoh, 25);
+          return v.trim() ? '<h4>' + esc(x[1]) + '</h4>' + v.split('\n').filter(String).map(function (l) { return '<p>' + esc(l) + '</p>'; }).join('') : '';
+        }).join('') || '<p class="muted">Belum ada isi.</p>';
+      };
+      f.oninput = pratinjau; pratinjau();
+      $('#btnJenisBaru').onclick = function () {
+        var j = prompt('Nama jenis kegiatan (samakan dengan pilihan "Jenis Kegiatan" saat membuat kegiatan):', '');
+        if (j && j.trim()) location.hash = '#/template/' + encodeURIComponent(j.trim());
+      };
+      f.onsubmit = function (e) {
+        e.preventDefault();
+        var d = formData(f); d.jenis = pilih;
+        var b = $('#btnSimpanTpl'); busy(b, true, 'Menyimpan…');
+        api('simpanTemplate', d).then(function () { busy(b, false); state.templates = null; toast('Template “' + pilih + '” tersimpan.', 'ok'); viewTemplate(pilih); })
+          .catch(function (err) { busy(b, false); toast(err.message, 'error'); });
+      };
+      if ($('#btnHapusTpl')) $('#btnHapusTpl').onclick = function () {
+        if (!confirm('Hapus template “' + pilih + '”? Kegiatan jenis ini akan memakai template Umum.')) return;
+        api('simpanTemplate', { jenis: pilih, hapus: true }).then(function () { state.templates = null; toast('Template dihapus.', 'ok'); location.hash = '#/template'; })
+          .catch(function (err) { toast(err.message, 'error'); });
+      };
+    }).catch(function (e) { $('#tplBody').innerHTML = '<div class="empty">' + esc(e.message) + '</div>'; });
+  }
+
+  // ================= View: Data Pegawai =================
+  function viewPegawai() {
+    $app.innerHTML = '<a class="back" href="#/">← Beranda</a>' +
+      '<div class="pagehead"><div><p class="eyebrow">Master data</p><h2>Data Pegawai</h2>' +
+      '<p class="muted small">Nama & NIP di sini muncul sebagai pilihan di form daftar hadir. Peserta tetap bisa mengisi manual.</p></div>' +
+      '<div class="btnrow"><button class="btn" id="btnImpor">⇪ Impor dari Excel</button><button class="btn primary" id="btnTambahPeg">＋ Tambah</button></div></div>' +
+      '<div id="panelPeg"></div>' +
+      '<div class="toolbar"><input type="search" id="cariPeg" class="input" placeholder="Cari nama / NIP / unit…"></div>' +
+      '<div class="card"><div id="listPeg"><div class="loader"><span></span></div></div></div>';
+    $('#btnTambahPeg').onclick = function () { formPegawai(null); };
+    $('#btnImpor').onclick = formImpor;
+    $('#cariPeg').oninput = function () { renderPegawai(); };
+    muatPegawai();
+  }
+  function muatPegawai() {
+    api('daftarPegawai').then(function (list) { state.pegawai = list; renderPegawai(); })
+      .catch(function (e) { $('#listPeg').innerHTML = '<div class="empty small">' + esc(e.message) + '</div>'; });
+  }
+  function renderPegawai() {
+    var q = ($('#cariPeg').value || '').toLowerCase();
+    var list = state.pegawai.filter(function (p) { return (p.nama + ' ' + p.nip + ' ' + p.unitKerja + ' ' + p.jabatan).toLowerCase().indexOf(q) >= 0; });
+    if (!state.pegawai.length) {
+      $('#listPeg').innerHTML = '<div class="empty small"><b>Belum ada data pegawai.</b><br>Klik “Impor dari Excel” untuk memasukkan banyak nama sekaligus.</div>';
+      return;
+    }
+    $('#listPeg').innerHTML = '<p class="muted small">' + list.length + ' dari ' + state.pegawai.length + ' pegawai</p>' +
+      '<div class="tablewrap"><table class="tbl"><thead><tr><th>#</th><th>Nama / NIP</th><th>Jabatan / Unit</th><th>Status</th><th></th></tr></thead><tbody>' +
+      list.map(function (p, i) {
+        return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(p.nama) + '</b><br><small>' + esc(p.nip || '–') + '</small></td>' +
+          '<td>' + esc(p.jabatan || '–') + '<br><small>' + esc(p.unitKerja) + '</small></td>' +
+          '<td>' + (p.aktif === 'tidak' ? '<span class="tag gray">Nonaktif</span>' : '<span class="tag green">Aktif</span>') + '</td>' +
+          '<td class="aksi"><button class="btn ghost sm" data-ubah="' + esc(p.id) + '">Ubah</button>' +
+          '<button class="icon-btn" data-hapus="' + esc(p.id) + '" title="Hapus">✕</button></td></tr>';
+      }).join('') + '</tbody></table></div>';
+    var byId = function (id) { return state.pegawai.filter(function (p) { return p.id === id; })[0]; };
+    $$('[data-ubah]').forEach(function (b) { b.onclick = function () { formPegawai(byId(b.dataset.ubah)); }; });
+    $$('[data-hapus]').forEach(function (b) {
+      b.onclick = function () {
+        var p = byId(b.dataset.hapus);
+        if (!confirm('Hapus ' + p.nama + ' dari Data Pegawai?\n(Daftar hadir yang sudah ada tidak terpengaruh.)')) return;
+        api('hapusPegawai', { id: p.id }).then(function () { toast('Data dihapus.', 'ok'); muatPegawai(); })
+          .catch(function (e) { toast(e.message, 'error'); });
+      };
+    });
+  }
+  function formPegawai(p) {
+    var baru = !p; p = p || { aktif: 'ya' };
+    $('#panelPeg').innerHTML = '<form class="card form" id="fPeg"><h3>' + (baru ? 'Tambah Pegawai' : 'Ubah Data Pegawai') + '</h3>' +
+      field('Nama lengkap & gelar *', '<input name="nama" required value="' + esc(p.nama) + '">') +
+      '<div class="grid2">' +
+      field('NIP', '<input name="nip" inputmode="numeric" value="' + esc(p.nip) + '">') +
+      field('No. HP', '<input name="noHp" type="tel" value="' + esc(p.noHp) + '">') +
+      field('Jabatan', '<input name="jabatan" placeholder="mis. Dosen / Lektor" value="' + esc(p.jabatan) + '">') +
+      field('Unit kerja', '<input name="unitKerja" placeholder="mis. Jurusan Gizi" value="' + esc(p.unitKerja) + '">') +
+      field('Status', '<select name="aktif"><option value="ya"' + (p.aktif !== 'tidak' ? ' selected' : '') + '>Aktif (muncul di pilihan)</option>' +
+        '<option value="tidak"' + (p.aktif === 'tidak' ? ' selected' : '') + '>Nonaktif (pensiun/pindah)</option></select>') +
+      '</div><div class="actions"><button type="button" class="btn ghost" id="btnBatalPeg">Batal</button><button class="btn primary" id="btnSimpanPeg">Simpan</button></div></form>';
+    $('#panelPeg').scrollIntoView({ behavior: 'smooth' });
+    $('#btnBatalPeg').onclick = function () { $('#panelPeg').innerHTML = ''; };
+    $('#fPeg').onsubmit = function (e) {
+      e.preventDefault();
+      var d = formData(this); if (!baru) d.id = p.id;
+      var b = $('#btnSimpanPeg'); busy(b, true, 'Menyimpan…');
+      api('simpanPegawai', d).then(function () { $('#panelPeg').innerHTML = ''; toast('Data pegawai tersimpan.', 'ok'); muatPegawai(); })
+        .catch(function (err) { busy(b, false); toast(err.message, 'error'); });
+    };
+  }
+  function formImpor() {
+    $('#panelPeg').innerHTML = '<div class="card form"><h3>Impor dari Excel / Google Sheets</h3>' +
+      '<ol class="small muted"><li>Siapkan kolom berurutan: <b>Nama | NIP | Jabatan | Unit Kerja | No HP</b> (kolom yang kosong boleh dibiarkan).</li>' +
+      '<li>Blok baris datanya di Excel, tekan <b>Ctrl+C</b>, lalu tempel (<b>Ctrl+V</b>) di kotak di bawah.</li>' +
+      '<li>Pegawai dengan NIP yang sudah ada akan diperbarui, bukan digandakan.</li></ol>' +
+      '<textarea id="txtImpor" rows="8" class="input mono" placeholder="Manjilala, S.Gz., M.Gizi&#9;197710092003041010&#9;Dosen&#9;Jurusan Gizi"></textarea>' +
+      '<div id="prevImpor" class="small muted"></div>' +
+      '<div class="actions"><button type="button" class="btn ghost" id="btnBatalImp">Batal</button><button class="btn primary" id="btnImporGo" disabled>Impor</button></div></div>';
+    $('#panelPeg').scrollIntoView({ behavior: 'smooth' });
+    var items = [];
+    $('#txtImpor').oninput = function () {
+      items = this.value.replace(/\r/g, '').split('\n').map(function (ln) {
+        var c = ln.indexOf('\t') >= 0 ? ln.split('\t') : ln.split(';');
+        c = c.map(function (x) { return x.trim().replace(/^"|"$/g, ''); });
+        return { nama: c[0] || '', nip: (c[1] || '').replace(/[^0-9]/g, ''), jabatan: c[2] || '', unitKerja: c[3] || '', noHp: c[4] || '' };
+      }).filter(function (r, i) { return r.nama && !(i === 0 && /^nama/i.test(r.nama)); });
+      $('#prevImpor').innerHTML = items.length ? '<b>' + items.length + ' baris siap diimpor.</b> Contoh: ' +
+        items.slice(0, 3).map(function (r) { return esc(r.nama) + (r.nip ? ' (' + esc(r.nip) + ')' : ''); }).join('; ') +
+        (items.some(function (r) { return !r.nip; }) ? '<br>⚠ Ada baris tanpa NIP – akan dicocokkan berdasarkan nama.' : '') : '';
+      $('#btnImporGo').disabled = !items.length;
+    };
+    $('#btnBatalImp').onclick = function () { $('#panelPeg').innerHTML = ''; };
+    $('#btnImporGo').onclick = function () {
+      var b = this; busy(b, true, 'Mengimpor…');
+      api('imporPegawai', { items: items }).then(function (r) {
+        $('#panelPeg').innerHTML = '';
+        toast('Impor selesai: ' + r.tambah + ' baru, ' + r.ubah + ' diperbarui' + (r.lewat ? ', ' + r.lewat + ' dilewati' : '') + '.', 'ok');
+        muatPegawai();
+      }).catch(function (e) { busy(b, false); toast(e.message, 'error'); });
+    };
+  }
+
   // ================= View: Dashboard =================
   function viewDashboard() {
     $app.innerHTML =
@@ -301,7 +456,7 @@
         '<form class="card form" id="fk">' +
         field('Judul / Nama Kegiatan *', '<textarea name="judul" rows="2" required placeholder="mis. Rapat Koordinasi Persiapan Akreditasi">' + esc(k.judul) + '</textarea>') +
         '<div class="grid2">' +
-        field('Jenis Kegiatan', '<select name="jenis">' + CFG.JENIS_KEGIATAN.map(function (j) { return '<option' + (j === k.jenis ? ' selected' : '') + '>' + esc(j) + '</option>'; }).join('') + '</select>') +
+        field('Jenis Kegiatan', '<select name="jenis">' + CFG.JENIS_KEGIATAN.concat(k.jenis && CFG.JENIS_KEGIATAN.indexOf(k.jenis) < 0 ? [k.jenis] : []).map(function (j) { return '<option' + (j === k.jenis ? ' selected' : '') + '>' + esc(j) + '</option>'; }).join('') + '</select>') +
         field('Tanggal *', '<input type="date" name="tanggal" required value="' + esc(k.tanggal) + '">') +
         field('Waktu Mulai', '<input type="time" name="waktuMulai" value="' + esc(k.waktuMulai) + '">') +
         field('Waktu Selesai', '<input type="time" name="waktuSelesai" value="' + esc(k.waktuSelesai) + '">') +
@@ -393,8 +548,19 @@
       list.map(function (h, i) {
         return '<tr><td>' + (i + 1) + '</td><td><b>' + esc(h.nama) + '</b><br><small>' + esc(h.nipNim) + '</small></td>' +
           '<td>' + esc(h.jabatan) + '<br><small>' + esc(h.unitKerja) + '</small></td><td><small>' + esc(String(h.waktu).slice(11, 16)) + '</small></td>' +
-          '<td><button class="icon-btn" data-del="' + esc(h.id) + '" title="Hapus">✕</button></td></tr>';
+          '<td class="aksi">' + (h.pegawaiId ? '' : '<button class="btn ghost sm" data-peg="' + i + '" title="Simpan ke Data Pegawai agar lain kali bisa dipilih">＋ Data Pegawai</button>') +
+          '<button class="icon-btn" data-del="' + esc(h.id) + '" title="Hapus">✕</button></td></tr>';
       }).join('') + '</tbody></table></div>';
+    $$('[data-peg]', el).forEach(function (b) {
+      b.onclick = function () {
+        var h = list[b.dataset.peg];
+        if (!confirm('Simpan "' + h.nama + '" ke Data Pegawai?\nLain kali cukup dipilih di form daftar hadir.')) return;
+        busy(b, true, '…');
+        api('simpanPegawai', { nama: h.nama, nip: h.nipNim, jabatan: h.jabatan, unitKerja: h.unitKerja, noHp: h.noHp })
+          .then(function () { b.remove(); toast(h.nama + ' disimpan ke Data Pegawai.', 'ok'); })
+          .catch(function (e) { busy(b, false); toast(e.message, 'error'); });
+      };
+    });
     $$('[data-del]', el).forEach(function (b) {
       b.onclick = function () {
         if (!confirm('Hapus data kehadiran ini?')) return;
@@ -418,19 +584,38 @@
   }
 
   // ---- Tab notulen & RTL ----
-  var NOTULEN_FIELDS = [
-    ['latarBelakang', 'Latar Belakang', 4, 'Mengapa kegiatan ini dilaksanakan.'],
-    ['dasarPelaksanaan', 'Dasar Pelaksanaan', 3, 'Tulis per baris, awali “1. ” untuk daftar bernomor (mis. surat tugas, undangan, regulasi).'],
+  var LAPORAN_FIELDS = [
+    ['latarBelakang', 'Latar Belakang', 5, ''],
+    ['dasarPelaksanaan', 'Dasar Pelaksanaan', 4, 'Satu baris satu dasar; awali “1. ” untuk penomoran.'],
     ['tujuan', 'Tujuan Kegiatan', 3, 'Awali “- ” untuk poin.'],
+    ['kataPengantar', 'Kata Pengantar', 4, 'Kosongkan untuk kata pengantar otomatis.']
+  ];
+  var NOTULEN_FIELDS = [
     ['agenda', 'Agenda / Susunan Acara', 4, 'mis. 1. Pembukaan  2. Evaluasi RTL  3. Diskusi  4. Penutup'],
     ['pembahasan', 'Hasil Pembahasan / Jalannya Rapat', 8, 'Uraikan poin-poin pembahasan.'],
     ['keputusan', 'Keputusan / Kesepakatan', 4, '']
   ];
   var NOTULEN_FIELDS_2 = [
     ['kesimpulan', 'Kesimpulan', 3, ''],
-    ['saran', 'Saran', 3, ''],
-    ['kataPengantar', 'Kata Pengantar (opsional)', 4, 'Kosongkan untuk memakai kata pengantar otomatis.']
+    ['saran', 'Saran', 3, '']
   ];
+  /** Ganti isian {judul}, {tanggal}, dst. pada template dengan data kegiatan. */
+  function isiTemplate(teks, k, jumlah) {
+    var d = parseDate(k.tanggal);
+    var map = { judul: k.judul, jenis: k.jenis, tanggal: tgl(k.tanggal), hari_tanggal: tgl(k.tanggal, true),
+      bulan: d ? ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'][d.getMonth()] : '',
+      tahun: d ? d.getFullYear() : '', tempat: k.tempat || '-', penyelenggara: k.penyelenggara || CFG.INSTITUSI.nama,
+      jumlah_peserta: jumlah == null ? '' : jumlah };
+    return String(teks || '').replace(/\{(\w+)\}/g, function (m, key) { return key in map ? map[key] : m; });
+  }
+  function ambilTemplate() {
+    if (state.templates) return Promise.resolve(state.templates);
+    return api('daftarTemplate').then(function (t) { state.templates = t; return t; });
+  }
+  function templateJenis(list, jenis) {
+    var j = String(jenis || '').toLowerCase().trim();
+    return list.filter(function (t) { return t.jenis.toLowerCase().trim() === j; })[0] || list.filter(function (t) { return t.jenis === 'Umum'; })[0];
+  }
   function textareaFields(list, n) {
     return list.map(function (f) {
       return field(f[1], '<textarea name="' + f[0] + '" rows="' + f[2] + '">' + esc(n[f[0]]) + '</textarea>', f[3]);
@@ -491,6 +676,11 @@
       '<div id="rtlList" class="rtl-list"></div>' +
       '<button type="button" class="btn sm" id="btnTambahRtl">＋ Tambah RTL</button>' +
       '<h3 class="sect">Penutup</h3>' + textareaFields(NOTULEN_FIELDS_2, n) +
+      '<details class="lapbox"' + (n.latarBelakang || n.dasarPelaksanaan || n.tujuan ? ' open' : '') + '><summary><b>Bagian Laporan</b> <span class="tag">opsional</span>' +
+      '<small>Latar belakang, dasar pelaksanaan, tujuan & kata pengantar. Jika kosong, laporan otomatis memakai <a href="#/template">Template Laporan</a> jenis “' + esc(d.kegiatan.jenis || 'Umum') + '”.</small></summary>' +
+      '<div class="btnrow left"><button type="button" class="btn sm" id="btnIsiTpl">📄 Isi dari template</button>' +
+      '<button type="button" class="btn sm" id="btnSalinSblm">↩ Salin dari rapat sebelumnya</button></div>' +
+      textareaFields(LAPORAN_FIELDS, n) + '</details>' +
       '<div class="actions sticky"><small class="muted" id="savedInfo">' + (n.diubahPada ? 'Tersimpan ' + esc(n.diubahPada) : 'Belum disimpan') + '</small>' +
       '<button class="btn primary" id="btnSN">Simpan Notulen & RTL</button></div></form>' +
       '<div class="card"><div class="cardhead"><h3>Foto Dokumentasi</h3>' +
@@ -498,6 +688,31 @@
       '<div id="fotoGrid" class="fotogrid"><div class="empty small">Memuat foto…</div></div></div>';
     renderRtl(rtl);
     var form = $('#fn');
+    function isiBagian(src, label) {
+      var ada = LAPORAN_FIELDS.some(function (f) { return form[f[0]].value.trim(); });
+      if (ada && !confirm('Isian Bagian Laporan yang sudah ada akan diganti dengan ' + label + '. Lanjutkan?')) return;
+      LAPORAN_FIELDS.forEach(function (f) { if (src[f[0]] != null) form[f[0]].value = src[f[0]]; });
+      form.oninput(); toast('Bagian Laporan diisi dari ' + label + '. Silakan periksa & sesuaikan.', 'ok');
+    }
+    $('#btnIsiTpl').onclick = function () {
+      var b = this; busy(b, true, 'Memuat…');
+      ambilTemplate().then(function (list) {
+        busy(b, false);
+        var t = templateJenis(list, d.kegiatan.jenis);
+        if (!t) return toast('Belum ada template. Buat di menu Template Laporan.', 'warn');
+        var hasil = {};
+        LAPORAN_FIELDS.forEach(function (f) { hasil[f[0]] = isiTemplate(t[f[0]], d.kegiatan, d.hadir.length); });
+        isiBagian(hasil, 'template “' + t.jenis + '”');
+      }).catch(function (e) { busy(b, false); toast(e.message, 'error'); });
+    };
+    $('#btnSalinSblm').onclick = function () {
+      var b = this; busy(b, true, 'Mencari…');
+      api('bagianLaporanSebelumnya', { kegiatanId: kid }).then(function (r) {
+        busy(b, false);
+        if (!r) return toast('Belum ada rapat sebelumnya berjenis “' + (d.kegiatan.jenis || '-') + '” yang Bagian Laporannya terisi.', 'warn');
+        isiBagian(r, '“' + r.dari.judul + '” (' + tgl(r.dari.tanggal) + ')');
+      }).catch(function (e) { busy(b, false); toast(e.message, 'error'); });
+    };
     form.oninput = function () {
       lsSet('sirapat_draft_' + kid, { t: Date.now(), data: formData(form), rtl: kumpulkanRtl() });
       $('#savedInfo').textContent = 'Ada perubahan belum disimpan';
@@ -749,7 +964,7 @@
     var n = d.notulen || {}, k = d.kegiatan;
     var cek = [
       ['Sampul (cover)', true], ['Lembar pengesahan', !!n.pimpinanRapat], ['Kata pengantar', true],
-      ['Daftar isi', true], ['BAB I Pendahuluan', !!(n.latarBelakang && n.tujuan)], ['BAB II Pelaksanaan', !!n.agenda || !!k.deskripsi],
+      ['Daftar isi', true], ['BAB I Pendahuluan' + (n.latarBelakang ? '' : ' (dari template)'), true], ['BAB II Pelaksanaan', !!n.agenda || !!k.deskripsi],
       ['BAB III Hasil kegiatan', !!n.pembahasan], ['Rencana tindak lanjut (' + (d.rtl || []).length + ' RTL)', (d.rtl || []).length > 0],
       ['BAB IV Penutup', !!n.kesimpulan],
       ['Lampiran 1 – Daftar hadir (' + d.hadir.length + ' orang)', d.hadir.length > 0],
@@ -835,6 +1050,12 @@
     busy(btn, true, 'Menyusun laporan…');
     Promise.all([muatAset(), api('dataLaporan', { id: id })]).then(function (r) {
       var aset = r[0], data = r[1];
+      data.notulen = data.notulen || {};
+      if (data.template) {
+        LAPORAN_FIELDS.forEach(function (f) {
+          if (!String(data.notulen[f[0]] || '').trim() && data.template[f[0]]) data.notulen[f[0]] = isiTemplate(data.template[f[0]], data.kegiatan, data.hadir.length);
+        });
+      }
       return Promise.all(data.foto.map(function (f) {
         return ukuranGambar('data:' + f.mime + ';base64,' + f.data).then(function (s) { f.w = s.w; f.h = s.h; });
       })).then(function () {
@@ -891,8 +1112,12 @@
         '<h2>' + esc(k.judul) + '</h2><p>📅 ' + esc(tgl(k.tanggal, true)) + (k.waktuMulai ? ' · 🕘 ' + esc(k.waktuMulai) + ' WITA' : '') +
         (k.tempat ? '<br>📍 ' + esc(k.tempat) : '') + '</p></div></div>' +
         '<form class="card form" id="fh" autocomplete="on">' +
-        field('Nama lengkap & gelar *', '<input name="nama" required autocomplete="name" placeholder="mis. Dr. Andi Rahmawati, S.Gz., M.Kes" value="' + esc(profil.nama) + '">') +
-        field('NIP / NIM / NIK', '<input name="nipNim" inputmode="numeric" value="' + esc(profil.nipNim) + '">') +
+        '<div class="field ac-wrap"><span>Nama lengkap & gelar *</span>' +
+        '<input name="nama" id="inNama" required autocomplete="off" placeholder="Ketik nama atau NIP Anda…" value="' + esc(profil.nama) + '">' +
+        '<input type="hidden" name="pegawaiId" id="inPid" value="' + esc(profil.pegawaiId) + '">' +
+        '<div class="ac-list" id="acList" role="listbox" hidden></div>' +
+        '<small id="acHint"></small></div>' +
+        field('NIP / NIM / NIK', '<input name="nipNim" id="inNip" inputmode="numeric" value="' + esc(profil.pegawaiId ? profil.nipSamar : profil.nipNim) + '">') +
         '<div class="grid2">' +
         field('Jabatan', '<input name="jabatan" placeholder="mis. Dosen" value="' + esc(profil.jabatan) + '">') +
         field('Unit kerja / Instansi', '<input name="unitKerja" placeholder="mis. Jurusan Gizi" value="' + esc(profil.unitKerja) + '">') +
@@ -904,6 +1129,7 @@
         '<label class="check"><input type="checkbox" id="ingat" checked> Ingat data saya di perangkat ini</label>' +
         '<button class="btn primary block lg" id="btnKirim">Kirim Daftar Hadir</button></form>' +
         '<p class="foot">' + esc(CFG.INSTITUSI.nama) + '</p></div>';
+      pasangPilihPegawai(profil);
       var pad = window.TandaTangan($('#cv'), { onChange: function () { $('#ph').style.display = pad && !pad.isEmpty() ? 'none' : ''; } });
       $('#ph').style.display = '';
       $('#btnClr').onclick = function () { pad.clear(); $('#ph').style.display = ''; };
@@ -911,7 +1137,8 @@
         e.preventDefault();
         if (pad.isEmpty()) { toast('Silakan bubuhkan tanda tangan.', 'error'); return; }
         var data = formData(this); data.kegiatanId = id; data.ttd = pad.toPNG();
-        if ($('#ingat').checked) lsSet('sirapat_profil', { nama: data.nama, nipNim: data.nipNim, jabatan: data.jabatan, unitKerja: data.unitKerja, noHp: data.noHp });
+        if ($('#ingat').checked) lsSet('sirapat_profil', { nama: data.nama, nipNim: data.pegawaiId ? '' : data.nipNim, pegawaiId: data.pegawaiId,
+          nipSamar: data.pegawaiId ? data.nipNim : '', jabatan: data.jabatan, unitKerja: data.unitKerja, noHp: data.noHp });
         else localStorage.removeItem('sirapat_profil');
         var b = $('#btnKirim'); busy(b, true, 'Mengirim…');
         if (!navigator.onLine) { antrikan(data); return selesai(k, data, true); }
@@ -928,6 +1155,69 @@
         '<p>Kehadiran Anda pada <b>' + esc(k.judul) + '</b> ' + (offline ? 'tersimpan di perangkat dan akan <b>dikirim otomatis</b> saat internet tersedia.' : 'telah tercatat.') + '</p>' +
         '<p class="muted small">' + new Date().toLocaleString('id-ID') + '</p></div></div>';
     }
+  }
+
+  /** Kolom nama dengan saran dari Data Pegawai; isian manual tetap diizinkan. */
+  function pasangPilihPegawai(profil) {
+    var inNama = $('#inNama'), inPid = $('#inPid'), inNip = $('#inNip'), list = $('#acList'), hint = $('#acHint');
+    var timer = null, hasil = [], aktif = -1, seq = 0;
+    function setTerpilih(on) {
+      inNip.readOnly = on;
+      inNama.classList.toggle('terpilih', on);
+      hint.innerHTML = on ? '<b class="ok">✓ Terdaftar di Data Pegawai</b> – NIP diisi otomatis. Bukan Anda? Ubah nama untuk memilih ulang / isi manual.'
+        : 'Ketik minimal 3 huruf nama atau 4 angka NIP, lalu pilih dari daftar. Tidak ada di daftar? Lanjutkan isi manual.';
+    }
+    function tutup() { list.hidden = true; aktif = -1; }
+    function pilih(r) {
+      inNama.value = r.nama; inPid.value = r.id; inNip.value = r.nipSamar;
+      var f = $('#fh');
+      if (r.jabatan) { f.jabatan.value = r.jabatan; f.jabatan.dataset.auto = '1'; }
+      if (r.unitKerja) { f.unitKerja.value = r.unitKerja; f.unitKerja.dataset.auto = '1'; }
+      setTerpilih(true); tutup();
+    }
+    function render() {
+      if (!hasil.length) {
+        list.innerHTML = '<div class="ac-empty">Tidak ditemukan di Data Pegawai – silakan isi manual.</div>';
+      } else {
+        list.innerHTML = hasil.map(function (r, i) {
+          return '<div class="ac-item' + (i === aktif ? ' on' : '') + '" data-i="' + i + '" role="option"><b>' + esc(r.nama) + '</b>' +
+            '<small>' + [r.nipSamar, r.jabatan, r.unitKerja].filter(Boolean).map(esc).join(' · ') + '</small></div>';
+        }).join('');
+      }
+      list.hidden = false;
+      $$('.ac-item', list).forEach(function (el) {
+        el.onmousedown = function (e) { e.preventDefault(); pilih(hasil[el.dataset.i]); };
+      });
+    }
+    function cari() {
+      var q = inNama.value.trim();
+      var cukup = /^\d+$/.test(q) ? q.length >= 4 : q.replace(/[^a-z0-9]/gi, '').length >= 3;
+      if (!cukup || !navigator.onLine) { tutup(); return; }
+      var my = ++seq;
+      api('cariPegawai', { q: q }, { publik: true }).then(function (r) {
+        if (my !== seq || document.activeElement !== inNama) return;
+        hasil = r; aktif = r.length ? 0 : -1; render();
+      }).catch(function () {});
+    }
+    inNama.addEventListener('input', function () {
+      if (inPid.value) {
+        inPid.value = ''; inNip.value = ''; setTerpilih(false);
+        // kosongkan jabatan/unit yang tadi terisi otomatis dari pilihan
+        [$('#fh').jabatan, $('#fh').unitKerja].forEach(function (el) { if (el.dataset.auto) { el.value = ''; delete el.dataset.auto; } });
+      }
+      clearTimeout(timer); timer = setTimeout(cari, 300);
+    });
+    inNama.addEventListener('keydown', function (e) {
+      if (list.hidden || !hasil.length) return;
+      if (e.key === 'ArrowDown') { aktif = (aktif + 1) % hasil.length; render(); e.preventDefault(); }
+      else if (e.key === 'ArrowUp') { aktif = (aktif - 1 + hasil.length) % hasil.length; render(); e.preventDefault(); }
+      else if (e.key === 'Enter' && aktif >= 0) { pilih(hasil[aktif]); e.preventDefault(); }
+      else if (e.key === 'Escape') tutup();
+    });
+    inNama.addEventListener('blur', function () { setTimeout(tutup, 150); });
+    inNama.addEventListener('focus', function () { if (!inPid.value && inNama.value.trim().length >= 3) cari(); });
+    setTerpilih(!!(profil && profil.pegawaiId));
+    if (profil && profil.pegawaiId) { $('#fh').jabatan.dataset.auto = '1'; $('#fh').unitKerja.dataset.auto = '1'; }
   }
 
   // ================= Antrean offline =================
