@@ -601,18 +601,18 @@
   function tabNotulen(d) {
     var n = Object.assign({}, d.notulen || {}), kid = d.kegiatan.id;
     var rtl = (d.rtl || []).slice();
-    // isian bawaan pimpinan rapat & notulis (menu Pengaturan)
-    var pg = d.pengaturan || {};
-    if (!n.pimpinanRapat && !n.notulis) {
-      n.pimpinanRapat = pg.pimpinanNama; n.nipPimpinan = pg.pimpinanNip; n.jabatanPimpinan = pg.pimpinanJabatan;
-      n.notulis = pg.notulisNama; n.nipNotulis = pg.notulisNip; n.jabatanNotulis = pg.notulisJabatan;
-    }
     var draft = lsGet('sirapat_draft_' + kid, null);
     var savedT = n.diubahPada ? Date.parse(String(n.diubahPada).replace(' ', 'T') + '+08:00') || 0 : 0;
     if (draft && draft.t > savedT) {
       Object.assign(n, draft.data); if (draft.rtl) rtl = draft.rtl;
       setTimeout(function () { toast('Draf yang belum tersimpan dipulihkan.', 'warn'); }, 300);
     }
+    // isian bawaan pimpinan rapat & notulis (menu Pengaturan) – diisi bila kolomnya masih kosong
+    var pg = d.pengaturan || {};
+    [['pimpinanRapat', 'pimpinanNama'], ['nipPimpinan', 'pimpinanNip'], ['jabatanPimpinan', 'pimpinanJabatan'],
+     ['notulis', 'notulisNama'], ['nipNotulis', 'notulisNip'], ['jabatanNotulis', 'notulisJabatan']].forEach(function (x) {
+      if (!String(n[x[0]] || '').trim() && pg[x[1]]) n[x[0]] = pg[x[1]];
+    });
     $('#tabBody').innerHTML =
       '<form class="card form" id="fn">' +
       '<p class="hint">💡 Tips: satu baris = satu paragraf. Awali baris dengan <code>1.</code> untuk daftar bernomor atau <code>-</code> untuk poin. Draf tersimpan otomatis di perangkat ini.</p>' +
