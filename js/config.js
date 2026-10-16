@@ -28,7 +28,7 @@ window.APP_CONFIG = {
   UNIT: 'Jurusan Gizi',
 
   // Pilihan nama rapat (pilihan terakhir memunculkan isian nama rapat)
-  JENIS_KEGIATAN: ['Rapat PBM', 'Rapat Evaluasi Kinerja', 'Rapat Pengelola', 'Rapat PKL/Rotasi', 'Rapat Lainnya'],
+  JENIS_KEGIATAN: ['Rapat Evaluasi PBM', 'Rapat Evaluasi Kinerja', 'Rapat Pengelola', 'Rapat PKL/Rotasi', 'Rapat Lainnya'],
 
   // Isian bawaan saat membuat kegiatan (bisa diubah per kegiatan)
   TEMPAT_DEFAULT: 'Ruang Rapat Jurusan Gizi Poltekkes Kemenkes Makassar',
