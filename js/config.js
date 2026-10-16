@@ -24,9 +24,15 @@ window.APP_CONFIG = {
   LOGO_H: 'assets/logo-kemenkes.png',
   IKON_KOP: { pin: 'assets/ic-pin.png', phone: 'assets/ic-phone.png', web: 'assets/ic-web.png' },
 
-  // Pilihan jenis kegiatan
-  JENIS_KEGIATAN: ['Rapat PBM', 'Rapat Evaluasi Kinerja', 'Rapat Pembentukan Panitia PKL/Rotasi', 'Rapat Insidentil',
-    'Workshop', 'Pelatihan', 'Seminar', 'Sosialisasi', 'Kegiatan Lainnya'],
+  // Unit pengguna aplikasi
+  UNIT: 'Jurusan Gizi',
+
+  // Pilihan nama rapat (pilihan terakhir memunculkan isian nama rapat)
+  JENIS_KEGIATAN: ['Rapat PBM', 'Rapat Evaluasi Kinerja', 'Rapat Pengelola', 'Rapat PKL/Rotasi', 'Rapat Lainnya'],
+
+  // Isian bawaan saat membuat kegiatan (bisa diubah per kegiatan)
+  TEMPAT_DEFAULT: 'Ruang Rapat Jurusan Gizi Poltekkes Kemenkes Makassar',
+  PENYELENGGARA_DEFAULT: 'Jurusan Gizi Poltekkes Kemenkes Makassar',
 
   // Jabatan default penyusun laporan evaluasi RTL
   JABATAN_PENYUSUN: 'Sekretaris Jurusan'

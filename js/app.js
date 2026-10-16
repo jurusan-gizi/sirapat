@@ -116,7 +116,7 @@
       '<section class="hero">' +
       '<div class="hero-card">' +
       '<img src="' + esc(CFG.LOGO_H || CFG.LOGO) + '" alt="Kemenkes Poltekkes Makassar" class="hero-logo">' +
-      '<p class="eyebrow">' + esc(CFG.NAMA_APLIKASI) + ' · ' + esc(CFG.INSTITUSI.nama) + '</p>' +
+      '<p class="eyebrow">' + esc(CFG.NAMA_APLIKASI) + ' · Poltekkes Kemenkes Makassar · ' + esc(CFG.UNIT || '') + '</p>' +
       '<h1>Presensi, notulen &amp;<br>tindak lanjut rapat<br><em>dalam satu tempat.</em></h1>' +
       '<form id="fLogin" class="login-form" autocomplete="on">' +
       '<label class="field"><span>Email</span><input type="email" name="email" required autocomplete="username" value="' + esc(ingat) + '" placeholder="nama@poltekkes-mks.ac.id"></label>' +
@@ -382,7 +382,7 @@
   function viewDashboard() {
     $app.innerHTML =
       '<div class="pagehead"><div><p class="eyebrow">Beranda</p><h2>Kegiatan</h2></div>' +
-      '<a class="btn primary" href="#/kegiatan/baru">＋ Kegiatan Baru</a></div>' +
+      '<a class="btn primary" href="#/kegiatan/baru">＋ Rapat Baru</a></div>' +
       '<div class="toolbar"><input type="search" id="cari" placeholder="Cari kegiatan…" class="input"></div>' +
       '<div id="list" class="cards"><div class="skeleton"></div><div class="skeleton"></div></div>';
     api('daftarKegiatan').then(function (rows) {
@@ -400,7 +400,7 @@
   }
   function renderList(rows) {
     if (!rows.length) {
-      $('#list').innerHTML = '<div class="empty"><b>Belum ada kegiatan.</b><br>Klik “Kegiatan Baru” untuk membuat daftar hadir pertama.</div>';
+      $('#list').innerHTML = '<div class="empty"><b>Belum ada rapat.</b><br>Klik “Rapat Baru” untuk membuat daftar hadir pertama.</div>';
       return;
     }
     $('#list').innerHTML = rows.map(function (k) {
@@ -417,32 +417,65 @@
   function parseDate(s) { var m = String(s || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? new Date(+m[1], +m[2] - 1, +m[3]) : null; }
 
   // ================= View: Form kegiatan =================
+  var BULAN_ID = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  function ketBulan(tanggal) { var d = parseDate(tanggal); return d ? BULAN_ID[d.getMonth()] + ' ' + d.getFullYear() : ''; }
   function viewFormKegiatan(id) {
+    var LAIN = 'Rapat Lainnya';
     var load = id ? api('detailKegiatan', { id: id }).then(function (d) { return d.kegiatan; }) : Promise.resolve({
-      tanggal: new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10), waktuMulai: '09:00', waktuSelesai: '12:00', jenis: 'Rapat', status: 'aktif'
+      tanggal: new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10), waktuMulai: '09:00', waktuSelesai: '12:00',
+      jenis: CFG.JENIS_KEGIATAN[0], status: 'aktif', tempat: CFG.TEMPAT_DEFAULT || '', penyelenggara: CFG.PENYELENGGARA_DEFAULT || '', baru: true
     });
     $app.innerHTML = '<div class="loader"><span></span></div>';
     load.then(function (k) {
+      // kegiatan lama yang jenisnya di luar daftar → diperlakukan sebagai "Rapat Lainnya"
+      var pilihan = CFG.JENIS_KEGIATAN.indexOf(k.jenis) >= 0 ? k.jenis : LAIN;
+      var namaLain = k.namaLain || (pilihan === LAIN && !k.baru ? k.judul : '');
+      var ket = k.baru ? ketBulan(k.tanggal) : (k.keterangan || '');
       $app.innerHTML =
         '<a class="back" href="' + (id ? '#/kegiatan/' + esc(id) : '#/') + '">← Kembali</a>' +
-        '<div class="pagehead"><div><p class="eyebrow">' + (id ? 'Ubah' : 'Buat') + ' kegiatan</p><h2>' + (id ? 'Edit Kegiatan' : 'Kegiatan Baru') + '</h2></div></div>' +
+        '<div class="pagehead"><div><p class="eyebrow">' + (id ? 'Ubah' : 'Buat') + ' rapat</p><h2>' + (id ? 'Edit Rapat' : 'Rapat Baru') + '</h2></div></div>' +
         '<form class="card form" id="fk">' +
-        field('Judul / Nama Kegiatan *', '<textarea name="judul" rows="2" required placeholder="mis. Rapat Koordinasi Persiapan Akreditasi">' + esc(k.judul) + '</textarea>') +
         '<div class="grid2">' +
-        field('Jenis Kegiatan', '<select name="jenis">' + CFG.JENIS_KEGIATAN.concat(k.jenis && CFG.JENIS_KEGIATAN.indexOf(k.jenis) < 0 ? [k.jenis] : []).map(function (j) { return '<option' + (j === k.jenis ? ' selected' : '') + '>' + esc(j) + '</option>'; }).join('') + '</select>') +
-        field('Tanggal *', '<input type="date" name="tanggal" required value="' + esc(k.tanggal) + '">') +
+        field('Nama Rapat *', '<select name="jenis" id="selJenis">' + CFG.JENIS_KEGIATAN.map(function (j) {
+          return '<option' + (j === pilihan ? ' selected' : '') + '>' + esc(j) + '</option>'; }).join('') + '</select>') +
+        field('Keterangan', '<input name="keterangan" id="inKet" placeholder="mis. Oktober 2026 / Triwulan III" value="' + esc(ket) + '">', 'Opsional – membedakan rapat yang berulang.') +
+        '</div>' +
+        '<div id="boxLain"' + (pilihan === LAIN ? '' : ' hidden') + '>' +
+        field('Nama rapat lainnya *', '<input name="namaLain" id="inLain" placeholder="mis. Rapat Persiapan Akreditasi" value="' + esc(namaLain) + '">') + '</div>' +
+        '<p class="judul-prev">Judul: <b id="prevJudul"></b></p>' +
+        '<div class="grid2">' +
+        field('Tanggal *', '<input type="date" name="tanggal" id="inTgl" required value="' + esc(k.tanggal) + '">') +
+        '<span></span>' +
         field('Waktu Mulai', '<input type="time" name="waktuMulai" value="' + esc(k.waktuMulai) + '">') +
         field('Waktu Selesai', '<input type="time" name="waktuSelesai" value="' + esc(k.waktuSelesai) + '">') +
         '</div>' +
-        field('Tempat', '<input name="tempat" placeholder="mis. Aula Lt. 3 Kampus Wijaya Kusuma" value="' + esc(k.tempat) + '">') +
-        field('Penyelenggara / Unit', '<input name="penyelenggara" placeholder="mis. Jurusan Gizi" value="' + esc(k.penyelenggara) + '">') +
+        field('Tempat', '<input name="tempat" value="' + esc(k.tempat) + '">') +
+        field('Penyelenggara / Unit', '<input name="penyelenggara" value="' + esc(k.penyelenggara) + '">') +
         field('Deskripsi / Agenda singkat', '<textarea name="deskripsi" rows="3" placeholder="Opsional">' + esc(k.deskripsi) + '</textarea>') +
         (id ? field('Status Daftar Hadir', '<select name="status"><option value="aktif"' + (k.status !== 'tutup' ? ' selected' : '') + '>Aktif (menerima isian)</option><option value="tutup"' + (k.status === 'tutup' ? ' selected' : '') + '>Ditutup</option></select>') : '') +
         '<div class="actions">' + (id ? '<button type="button" class="btn danger ghost" id="btnHapus">Hapus kegiatan</button>' : '<span></span>') +
         '<button class="btn primary" id="btnSimpan">Simpan & Buat Form Daftar Hadir</button></div></form>';
+      var ketManual = !k.baru;   // keterangan bawaan mengikuti bulan tanggal rapat, sampai diubah sendiri
+      var susunJudul = function () {
+        var j = $('#selJenis').value, nama = j === LAIN ? $('#inLain').value.trim() : j;
+        return [nama, $('#inKet').value.trim()].filter(Boolean).join(' ');
+      };
+      var segarkan = function () {
+        var lain = $('#selJenis').value === LAIN;
+        $('#boxLain').hidden = !lain; $('#inLain').required = lain;
+        $('#prevJudul').textContent = susunJudul() || '–';
+      };
+      $('#selJenis').onchange = function () { segarkan(); if ($('#selJenis').value === LAIN) $('#inLain').focus(); };
+      $('#inLain').oninput = segarkan;
+      $('#inKet').oninput = function () { ketManual = true; segarkan(); };
+      $('#inTgl').onchange = function () { if (!ketManual) { $('#inKet').value = ketBulan(this.value); segarkan(); } };
+      segarkan();
       $('#fk').onsubmit = function (e) {
         e.preventDefault();
         var d = formData(this); if (id) d.id = id;
+        if (d.jenis !== LAIN) d.namaLain = '';
+        d.judul = susunJudul();
+        if (!d.judul) return toast('Nama rapat wajib diisi.', 'error');
         var b = $('#btnSimpan'); busy(b, true, 'Menyimpan…');
         api('simpanKegiatan', d).then(function (res) {
           toast('Kegiatan tersimpan.', 'ok'); location.hash = '#/kegiatan/' + res.id;

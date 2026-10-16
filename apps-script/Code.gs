@@ -10,7 +10,7 @@
  */
 
 // ====== KONFIGURASI ======
-var VERSI = '4.0';              // versi backend (tampil di URL /exec untuk pengecekan)
+var VERSI = '4.1';              // versi backend (tampil di URL /exec untuk pengecekan)
 var SESI_DETIK = 6 * 3600;      // lama sesi login admin (maks. 6 jam – batas CacheService)
 var MAKS_GAGAL = 5;             // percobaan login salah sebelum dikunci sementara
 var KUNCI_DETIK = 15 * 60;      // lama penguncian setelah terlalu banyak gagal
@@ -24,7 +24,9 @@ var SHEETS = {
              // evaluasi RTL (PPEPP)
              'evaluasiDari', 'evPenyusun', 'evNipPenyusun', 'evJabatanPenyusun', 'evKesimpulan',
              // berkas undangan yang diunggah (id file gambar di Drive, dipisah koma)
-             'undanganIds'],
+             'undanganIds',
+             // nama rapat bila memilih "Rapat Lainnya" & keterangan judul (mis. "Oktober 2026")
+             'namaLain', 'keterangan'],
   Hadir: ['id', 'kegiatanId', 'waktu', 'nama', 'nipNim', 'jabatan', 'unitKerja', 'noHp',
           'ttdFileId', 'pegawaiId'],
   // Pengaturan umum (isian bawaan pimpinan rapat & notulis, dll.)
@@ -498,6 +500,7 @@ function simpanKegiatan_(p, user) {
   return withLock_(function () {
     var data = {
       judul: clean_(p.judul, 300), jenis: clean_(p.jenis, 60), tanggal: clean_(p.tanggal, 10),
+      namaLain: clean_(p.namaLain, 200), keterangan: clean_(p.keterangan, 120),
       waktuMulai: clean_(p.waktuMulai, 5), waktuSelesai: clean_(p.waktuSelesai, 5),
       tempat: clean_(p.tempat, 200), penyelenggara: clean_(p.penyelenggara, 200),
       deskripsi: clean_(p.deskripsi, 2000), status: p.status === 'tutup' ? 'tutup' : 'aktif',
