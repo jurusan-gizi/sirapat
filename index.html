@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>SIRAPAT · Sistem Informasi Rapat, Presensi &amp; Tindak Lanjut</title>
+  <meta name="description" content="Presensi digital, notulen, RTL, evaluasi tindak lanjut dan laporan rapat Poltekkes Kemenkes Makassar">
+  <meta name="theme-color" content="#00615C">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar" id="topbar">
+    <a href="#/" class="brand">
+      <img src="icons/icon-192.png" alt="" width="34" height="34">
+      <span><b id="appName">SIRAPAT</b><small id="appSub">Rapat, Presensi &amp; Tindak Lanjut</small></span>
+    </a>
+    <div class="topbar-right" id="userBox"></div>
+  </header>
+
+  <main id="app" class="app"><div class="loader"><span></span></div></main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div id="netbar" class="netbar" hidden>Anda sedang offline – data akan dikirim otomatis saat online.</div>
+
+  <script src="js/config.js"></script>
+  <script src="js/cover.js"></script>
+  <script src="js/laporan.js"></script>
+  <script src="js/ttd.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
