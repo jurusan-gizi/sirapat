@@ -10,6 +10,7 @@
  */
 
 // ====== KONFIGURASI ======
+var VERSI = '3.1';              // versi backend (tampil di URL /exec untuk pengecekan)
 var SESI_DETIK = 6 * 3600;      // lama sesi login admin (maks. 6 jam – batas CacheService)
 var MAKS_GAGAL = 5;             // percobaan login salah sebelum dikunci sementara
 var KUNCI_DETIK = 15 * 60;      // lama penguncian setelah terlalu banyak gagal
@@ -86,13 +87,62 @@ function resetPasswordSuperadmin() {
     var pw = passwordAcak_(), sec = buatHash_(pw);
     a.salt = sec.salt; a.hash = sec.hash; a.wajibGanti = 'ya'; a.aktif = 'ya';
     updateRow_('Admin', a._row, a);
+    bukaKunci_(a.email);
     Logger.log(a.email + '  →  password sementara: ' + pw);
   });
 }
 
+// ====== ALAT BANTU (jalankan dari editor Apps Script) ======
+/**
+ * Uji login langsung di server, tanpa lewat aplikasi web.
+ * Isi EMAIL & PASSWORD di bawah, simpan, lalu Jalankan fungsi tesLogin.
+ */
+function tesLogin() {
+  var EMAIL = 'admin@poltekkes-mks.ac.id';
+  var PASSWORD = 'TULIS_PASSWORD_DI_SINI';
+  bukaKunci_(EMAIL);
+  try {
+    var u = login_({ email: EMAIL, password: PASSWORD });
+    logoutToken_(u.token);
+    Logger.log('BERHASIL – password & backend OK (' + u.nama + ', ' + u.peran + ').');
+    Logger.log('Jika di aplikasi masih gagal: pastikan URL /exec menampilkan "versi":"' + VERSI + '" ' +
+      '(buat Versi baru di Kelola deployment) dan API_URL di js/config.js sama dengan URL /exec.');
+  } catch (e) {
+    Logger.log('GAGAL: ' + e.message);
+    Logger.log('Jalankan resetPasswordSuperadmin untuk membuat password sementara baru.');
+  }
+}
+
+/** Buka kunci login semua akun (setelah salah password 5x). */
+function bukaKunciSemua() {
+  rows_('Admin').forEach(function (a) { bukaKunci_(a.email); });
+  Logger.log('Kunci login semua akun sudah dibuka.');
+}
+
+/** Tampilkan info pemasangan: spreadsheet yang dipakai & daftar akun admin. */
+function diagnosa() {
+  var props = PropertiesService.getScriptProperties();
+  Logger.log('Versi backend : ' + VERSI);
+  Logger.log('Database      : ' + ss_().getUrl());
+  Logger.log('Folder berkas : https://drive.google.com/drive/folders/' + props.getProperty('FOLDER_ID'));
+  var admins = rows_('Admin');
+  Logger.log('Jumlah admin  : ' + admins.length);
+  admins.forEach(function (a) {
+    Logger.log(' - ' + a.email + ' | ' + a.peran + ' | aktif: ' + (a.aktif === 'ya' ? 'ya' : 'TIDAK') +
+      ' | wajib ganti password: ' + (a.wajibGanti === 'ya' ? 'ya' : 'tidak'));
+  });
+}
+
+function bukaKunci_(email) {
+  CacheService.getScriptCache().remove('gagal_' + sha_(String(email).toLowerCase().trim()).slice(0, 24));
+}
+function logoutToken_(token) {
+  if (token) CacheService.getScriptCache().remove('sesi_' + token);
+}
+
 // ====== ROUTER ======
 function doGet(e) {
-  return json_({ ok: true, app: 'SIRAPAT', time: new Date().toISOString() });
+  return json_({ ok: true, app: 'SIRAPAT', versi: VERSI, login: 'sheet', time: new Date().toISOString() });
 }
 
 function doPost(e) {
@@ -182,14 +232,14 @@ function publikAdmin_(a) {
 
 function login_(p) {
   var email = clean_(p.email, 120).toLowerCase();
-  var pw = String(p.password || '');
+  var pw = String(p.password || '').trim();   // spasi di awal/akhir (sering ikut tersalin) diabaikan
   if (!email || !pw) throw new Error('Email dan password wajib diisi.');
   var cache = CacheService.getScriptCache();
   var kGagal = 'gagal_' + sha_(email).slice(0, 24);
   var gagal = Number(cache.get(kGagal) || 0);
   if (gagal >= MAKS_GAGAL) throw new Error('Terlalu banyak percobaan. Coba lagi dalam 15 menit.');
 
-  var a = rows_('Admin').filter(function (r) { return r.email.toLowerCase() === email; })[0];
+  var a = rows_('Admin').filter(function (r) { return r.email.toLowerCase().trim() === email; })[0];
   if (!a || a.aktif !== 'ya' || buatHash_(pw, a.salt).hash !== a.hash) {
     cache.put(kGagal, String(gagal + 1), KUNCI_DETIK);
     throw new Error('Email atau password salah.');
@@ -214,15 +264,15 @@ function verifikasiSesi_(token) {
 }
 
 function logout_(p, user, token) {
-  CacheService.getScriptCache().remove('sesi_' + token);
+  logoutToken_(token);
   return true;
 }
 
 function gantiPassword_(p, user, token) {
   var a = rows_('Admin').filter(function (r) { return r.email === user.email; })[0];
   if (!a) throw new Error('Akun tidak ditemukan.');
-  if (buatHash_(String(p.lama || ''), a.salt).hash !== a.hash) throw new Error('Password lama salah.');
-  var baru = cekPassword_(p.baru);
+  if (buatHash_(String(p.lama || '').trim(), a.salt).hash !== a.hash) throw new Error('Password lama salah.');
+  var baru = cekPassword_(String(p.baru || '').trim());
   if (baru === p.lama) throw new Error('Password baru harus berbeda dari password lama.');
   var sec = buatHash_(baru);
   a.salt = sec.salt; a.hash = sec.hash; a.wajibGanti = '';

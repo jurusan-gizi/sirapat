@@ -3,7 +3,7 @@
  */
 window.APP_CONFIG = {
   // URL Web App Apps Script (Deploy > Web app > URL yang berakhiran /exec)
-  API_URL: 'https://script.google.com/macros/s/GANTI_DENGAN_ID_DEPLOYMENT/exec',
+  API_URL: 'https://script.google.com/macros/s/AKfycbxdSFocPddJBNT_4WK7sd6QXoidczCiSYz0fYl-iPWsX98uVnesc4sq7F5L5DdMZxoH/exec',
 
   NAMA_APLIKASI: 'SIRAPAT',
   SUBJUDUL: 'Rapat, Presensi & Tindak Lanjut',
