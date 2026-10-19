@@ -65,6 +65,7 @@
   }
   function logout(expired) {
     if (state.user && !expired) api('logout').catch(function () {});
+    if (!expired) { try { sessionStorage.setItem('sirapat_nosso', '1'); } catch (e) {} }
     state.user = null; localStorage.removeItem('sirapat_user');
     renderUserBox();
     if (expired) toast('Sesi login berakhir, silakan login kembali.', 'warn');
@@ -78,7 +79,7 @@
       '<span class="uname">' + esc(u.nama) + '</span><span class="caret">▾</span></button>' +
       '<div class="menu" id="menuUser" hidden><div class="menu-head"><b>' + esc(u.nama) + '</b><small>' + esc(u.email) + '</small>' +
       '<span class="tag">' + (u.peran === 'superadmin' ? 'Superadmin' : 'Admin') + '</span></div>' +
-      '<a href="#/">🏠 Beranda</a><a href="#/pegawai">📇 Data Pegawai</a><a href="#/akun">🔑 Ganti Password</a>' +
+      '<a href="#/">🏠 Beranda</a><a href="#/pegawai">📇 Data Pegawai</a>' + (u.sso ? '' : '<a href="#/akun">🔑 Ganti Password</a>') +
       (u.peran === 'superadmin' ? '<a href="#/pengaturan">⚙️ Pengaturan</a><a href="#/admin">👥 Kelola Admin</a>' : '') +
       '<button id="btnLogout">↩ Keluar</button></div></div>';
     var menu = $('#menuUser');
@@ -96,7 +97,12 @@
     document.body.classList.toggle('publik', parts[0] === 'hadir');
     if (parts[0] === 'hadir' && parts[1]) return viewHadir(parts[1]);
     loadUser();
-    if (!state.user) return viewLogin();
+    if (!state.user) {
+      var tidakOtomatis = false;
+      try { tidakOtomatis = sessionStorage.getItem('sirapat_nosso') === '1'; } catch (e) {}
+      if (ssoStaf() && !tidakOtomatis) return masukSso();
+      return viewLogin();
+    }
     if (state.user.wajibGanti) return viewAkun(true);
     if (parts[0] === 'akun') return viewAkun(false);
     if (parts[0] === 'admin') return viewKelolaAdmin();
@@ -108,6 +114,24 @@
     return viewDashboard();
   }
   window.addEventListener('hashchange', route);
+
+  // ================= Masuk lewat Gizi-Link (SSO) =================
+  function ssoStaf() { return window.GiziSSO && window.GiziSSO.getStaf ? window.GiziSSO.getStaf() : null; }
+  function masukSso() {
+    var s = ssoStaf();
+    if (!s) { if (window.GiziSSO) window.GiziSSO.masuk(location.href.split('#')[0], 'staf'); return; }
+    $app.innerHTML = '<div class="loader"><span></span></div>';
+    api('loginSso', { token: s.token }, { publik: true }).then(function (u) {
+      try { sessionStorage.removeItem('sirapat_nosso'); } catch (e) {}
+      state.user = null; simpanUser(u);
+      toast('Selamat datang, ' + u.nama + '!', 'ok');
+      route();
+    }).catch(function (err) {
+      try { sessionStorage.setItem('sirapat_nosso', '1'); } catch (e) {}
+      viewLogin();
+      toast(err.message, 'error');
+    });
+  }
 
   // ================= View: Login =================
   function viewLogin() {
@@ -123,11 +147,14 @@
       '<label class="field"><span>Password</span><div class="pw"><input type="password" name="password" required autocomplete="current-password">' +
       '<button type="button" class="icon-btn lihat" tabindex="-1" title="Tampilkan">👁</button></div></label>' +
       '<button class="btn primary block lg" id="btnLogin">Masuk</button>' +
+      (window.GiziSSO ? '<button type="button" class="btn block lg" id="btnSso" style="margin-top:8px">🔗 Masuk lewat Gizi-Link</button>' : '') +
       '<p class="muted small">Akun admin dibuat oleh superadmin. Lupa password? Hubungi superadmin SIRAPAT untuk reset.</p></form>' +
       '<ul class="feat"><li><i>1</i>Buat kegiatan & bagikan QR daftar hadir</li><li><i>2</i>Peserta isi & tanda tangan langsung di HP</li>' +
       '<li><i>3</i>Tulis notulen, RTL & unggah dokumentasi</li><li><i>4</i>Evaluasi RTL rapat sebelumnya (siklus PPEPP)</li><li><i>5</i>Unduh laporan Word lengkap sekali klik</li></ul>' +
       '</div></section>';
     pasangLihatPw($app);
+    var bSso = $('#btnSso');
+    if (bSso) bSso.onclick = function () { try { sessionStorage.removeItem('sirapat_nosso'); } catch (e) {} masukSso(); };
     var f = $('#fLogin');
     if (ingat) f.password.focus(); else f.email.focus();
     f.onsubmit = function (e) {
