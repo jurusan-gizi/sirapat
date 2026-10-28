@@ -1,5 +1,5 @@
 /* Service worker SIRAPAT – cache aplikasi agar bisa dibuka offline */
-var VERSION = 'sirapat-v13';
+var VERSION = 'sirapat-v14';
 var SHELL = [
   './', 'index.html', 'css/style.css', 'manifest.webmanifest',
   'js/config.js', 'js/cover.js', 'js/laporan.js', 'js/ttd.js', 'js/app.js',

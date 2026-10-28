@@ -965,10 +965,12 @@
       '<div class="card"><h3>📄 Dokumen Rapat (Word)</h3>' +
       '<p class="muted small">Sampul + <b>U</b>ndangan + <b>A</b>bsen + <b>N</b>otulen (dengan RTL) + <b>G</b>ambar kegiatan, dalam satu file .docx.</p>' +
       '<div id="peringatan"></div>' +
-      '<div class="field"><span>Ukuran foto dokumentasi</span><div class="pilih-foto">' +
-        '<label class="check"><input type="radio" name="ukFoto" value="kecil"' + (lsGet('sirapat_ukuran_foto', 'kecil') !== 'besar' ? ' checked' : '') + '> 4 foto per halaman</label>' +
-        '<label class="check"><input type="radio" name="ukFoto" value="besar"' + (lsGet('sirapat_ukuran_foto', 'kecil') === 'besar' ? ' checked' : '') + '> 2 foto per halaman (besar)</label>' +
-      '</div></div>' +
+      '<p class="uk-judul">Ukuran foto dokumentasi</p><div class="uk-foto" role="radiogroup">' +
+        '<label><input type="radio" name="ukFoto" value="kecil"' + (lsGet('sirapat_ukuran_foto', 'kecil') !== 'besar' ? ' checked' : '') + '>' +
+          '<span><i class="uk-ikon uk-4"><b></b><b></b><b></b><b></b></i><strong>4 foto</strong><small>per halaman</small></span></label>' +
+        '<label><input type="radio" name="ukFoto" value="besar"' + (lsGet('sirapat_ukuran_foto', 'kecil') === 'besar' ? ' checked' : '') + '>' +
+          '<span><i class="uk-ikon uk-2"><b></b><b></b></i><strong>2 foto</strong><small>per halaman (besar)</small></span></label>' +
+      '</div>' +
       '<button class="btn primary block" id="btnLap">⬇ Unduh Dokumen Rapat</button>' +
       '<hr class="sep"><h3>🔁 Evaluasi Tindak Lanjut</h3>' +
       '<p class="muted small">Ringkasan evaluasi RTL rapat sebelumnya (2–3 halaman) sebagai bukti siklus PPEPP.</p>' +

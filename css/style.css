@@ -324,5 +324,19 @@ hr.sep { border: 0; border-top: 1px solid var(--line); margin: 18px 0 14px; }
 
 .judul-prev { margin: -4px 0 14px; padding: 10px 14px; background: var(--teal-50); border-radius: 12px; font-size: .88rem; color: var(--muted); }
 .judul-prev b { color: var(--teal); }
-.pilih-foto .check { margin: 4px 0; }
-.pilih-foto { margin-bottom: 12px; }
+/* Pilihan ukuran foto Dokumen Rapat */
+.uk-judul { font-weight: 600; font-size: .86rem; margin: 4px 0 8px; }
+.uk-foto { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+.uk-foto label { cursor: pointer; display: block; }
+.uk-foto input { position: absolute; opacity: 0; pointer-events: none; }
+.uk-foto span { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 8px; border: 1.5px solid var(--line); border-radius: 12px; background: #fff; text-align: center; transition: border-color .15s, background .15s; }
+.uk-foto strong { font-size: .92rem; }
+.uk-foto small { font-size: .76rem; color: var(--muted); }
+.uk-foto input:checked + span { border-color: var(--teal); background: var(--teal-50); box-shadow: 0 0 0 3px rgba(0,181,173,.15); }
+.uk-foto input:focus-visible + span { outline: 2px solid var(--teal-2); outline-offset: 2px; }
+.uk-ikon { display: grid; gap: 3px; width: 30px; height: 40px; padding: 4px; border: 1.5px solid #9fb6b9; border-radius: 4px; margin-bottom: 6px; background: #fff; }
+.uk-ikon b { background: #9fb6b9; border-radius: 2px; }
+.uk-4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+.uk-2 { grid-template-rows: 1fr 1fr; }
+.uk-foto input:checked + span .uk-ikon { border-color: var(--teal); }
+.uk-foto input:checked + span .uk-ikon b { background: var(--teal); }
