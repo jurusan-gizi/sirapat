@@ -438,7 +438,8 @@
 
     // ---- G: Gambar / dokumentasi ----
     isi = isi.concat(judulBagian('DOKUMENTASI KEGIATAN', judul.toUpperCase()));
-    isi = isi.concat(galeri(D, K, foto.map(function (f) { return { data: b64(f.data), mime: f.mime, w: f.w, h: f.h, ket: f.keterangan || ('Dokumentasi ' + judul) }; })));
+    isi = isi.concat(galeri(D, K, foto.map(function (f) { return { data: b64(f.data), mime: f.mime, w: f.w, h: f.h, ket: f.keterangan || ('Dokumentasi ' + judul) }; }),
+      data.ukuranFoto === 'besar' ? 2 : 4));
 
     return K.dokumen({
       title: 'Dokumen Rapat ' + judul,
@@ -452,9 +453,24 @@
     });
   }
 
-  /** Grid foto 2 kolom dengan keterangan. */
-  function galeri(D, K, list) {
+  /**
+   * Foto dokumentasi dengan keterangan.
+   * perHalaman 4 = grid 2 kolom (kecil) · perHalaman 2 = satu kolom, foto besar, 2 foto per halaman.
+   */
+  function galeri(D, K, list, perHalaman) {
     if (!list.length) return K.belumDiisi();
+    if (perHalaman === 2) {
+      var out = [], maxW = 140, maxH = 92;
+      list.forEach(function (f, i) {
+        var ratio = (f.h && f.w) ? f.h / f.w : 0.75;
+        var w = maxW, h = w * ratio;
+        if (h > maxH) { h = maxH; w = h / ratio; }
+        out.push(K.para([K.img(f.data, w, h, /png/.test(f.mime) ? 'png' : 'jpg')],
+          { alignment: K.C, spacing: { before: i % 2 ? 240 : 0, after: 80 }, keepNext: true, pageBreakBefore: i > 0 && i % 2 === 0 }));
+        out.push(K.para([K.run(f.ket, { size: 20, italics: true })], { alignment: K.C, spacing: { after: 120, line: 252 } }));
+      });
+      return out;
+    }
     var half = K.CW / 2, fw = 66, rows = [];
     for (var i = 0; i < list.length; i += 2) {
       rows.push(new D.TableRow({ cantSplit: true, children: [list[i], list[i + 1]].map(function (f) {

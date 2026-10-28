@@ -965,13 +965,21 @@
       '<div class="card"><h3>📄 Dokumen Rapat (Word)</h3>' +
       '<p class="muted small">Sampul + <b>U</b>ndangan + <b>A</b>bsen + <b>N</b>otulen (dengan RTL) + <b>G</b>ambar kegiatan, dalam satu file .docx.</p>' +
       '<div id="peringatan"></div>' +
+      '<div class="field"><span>Ukuran foto dokumentasi</span><div class="pilih-foto">' +
+        '<label class="check"><input type="radio" name="ukFoto" value="kecil"' + (lsGet('sirapat_ukuran_foto', 'kecil') !== 'besar' ? ' checked' : '') + '> 4 foto per halaman</label>' +
+        '<label class="check"><input type="radio" name="ukFoto" value="besar"' + (lsGet('sirapat_ukuran_foto', 'kecil') === 'besar' ? ' checked' : '') + '> 2 foto per halaman (besar)</label>' +
+      '</div></div>' +
       '<button class="btn primary block" id="btnLap">⬇ Unduh Dokumen Rapat</button>' +
       '<hr class="sep"><h3>🔁 Evaluasi Tindak Lanjut</h3>' +
       '<p class="muted small">Ringkasan evaluasi RTL rapat sebelumnya (2–3 halaman) sebagai bukti siklus PPEPP.</p>' +
       (adaEv ? '<button class="btn block" id="btnLapEv2">⬇ Unduh Evaluasi RTL</button>'
         : '<p class="hint">Belum ada evaluasi RTL pada rapat ini. Isi di tab <a href="#/kegiatan/' + esc(k.id) + '/evaluasi">Evaluasi RTL</a>.</p>') +
       '</div></div>';
-    $('#btnLap').onclick = function () { buatLaporan(k.id, this); };
+    $('#btnLap').onclick = function () {
+      var uk = (document.querySelector('input[name="ukFoto"]:checked') || {}).value || 'kecil';
+      lsSet('sirapat_ukuran_foto', uk);
+      buatLaporan(k.id, this, uk);
+    };
     if (adaEv) $('#btnLapEv2').onclick = function () { buatLaporanEvaluasi(k.id, this); };
     var cekKurang = function (jmlUnd) {
       var kurang = [];
@@ -1104,11 +1112,12 @@
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 5000);
   }
-  function buatLaporan(id, btn) {
+  function buatLaporan(id, btn, ukuranFoto) {
     busy(btn, true, 'Menyusun dokumen…');
     Promise.all([muatAset(), api('dataLaporan', { id: id })]).then(function (r) {
       var aset = r[0], data = r[1];
       data.notulen = data.notulen || {};
+      data.ukuranFoto = ukuranFoto || 'kecil';
       return Promise.all(data.foto.concat(data.undangan || []).map(function (f) {
         return ukuranGambar('data:' + f.mime + ';base64,' + f.data).then(function (s) { f.w = s.w; f.h = s.h; });
       })).then(function () {
