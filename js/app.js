@@ -960,10 +960,14 @@
       '<div class="card u-item"><div class="u-head"><span class="u-huruf">G</span><div><h3>Gambar / Foto Kegiatan</h3><small id="infoFoto">' +
       (n.fotoIds ? String(n.fotoIds).split(',').filter(String).length + ' foto' : '<span class="warn-t">Belum ada foto</span>') + '</small></div>' +
       '<a class="btn sm ghost" href="#/kegiatan/' + esc(k.id) + '/notulen">Kelola</a></div></div>' +
+      '<div class="card u-item"><div class="u-head"><span class="u-huruf">B</span><div><h3>Bahan Rapat <small class="muted">(lampiran, opsional)</small></h3><small id="infoBahan">Memuat…</small></div>' +
+      '<label class="btn sm primary">📎 Unggah Bahan<input type="file" hidden accept=".pdf,.ppt,.pptx,.doc,.docx,.jpg,.jpeg,.png" multiple id="inBahan"></label></div>' +
+      '<p class="muted small">Materi paparan atau dokumen rapat: <b>PDF, PPT/PPTX, DOC/DOCX</b>, atau gambar (maks. ' + 25 + ' MB per file). File asli tersimpan di Drive; tiap halaman/slide dilampirkan di akhir Dokumen Rapat.</p>' +
+      '<div id="daftarBahan" class="bahan-list"></div></div>' +
       '</div>' +
       '<div class="grid-side"><div class="card lap-preview">' + miniCover('DOKUMEN RAPAT', k.judul) + '</div>' +
       '<div class="card"><h3>📄 Dokumen Rapat (Word)</h3>' +
-      '<p class="muted small">Sampul + <b>U</b>ndangan + <b>A</b>bsen + <b>N</b>otulen (dengan RTL) + <b>G</b>ambar kegiatan, dalam satu file .docx.</p>' +
+      '<p class="muted small">Sampul + <b>U</b>ndangan + <b>A</b>bsen + <b>N</b>otulen (dengan RTL) + <b>G</b>ambar kegiatan + lampiran <b>B</b>ahan rapat, dalam satu file .docx.</p>' +
       '<div id="peringatan"></div>' +
       '<p class="uk-judul">Ukuran foto dokumentasi</p><div class="uk-foto" role="radiogroup">' +
         '<label><input type="radio" name="ukFoto" value="kecil"' + (lsGet('sirapat_ukuran_foto', 'kecil') !== 'besar' ? ' checked' : '') + '>' +
@@ -992,6 +996,11 @@
       $('#peringatan').innerHTML = kurang.length ? '<p class="hint warn">⚠ ' + kurang.join('; ') + '. Dokumen tetap bisa diunduh.</p>' : '<p class="hint ok">✓ Berkas UANG lengkap.</p>';
     };
     muatUndangan(k.id, cekKurang);
+    muatBahan(k.id);
+    $('#inBahan').onchange = function () {
+      var files = Array.prototype.slice.call(this.files); this.value = '';
+      unggahBahan(k.id, files);
+    };
     $('#inUnd').onchange = function () {
       var files = Array.prototype.slice.call(this.files); this.value = '';
       if (!files.length) return;
@@ -1014,6 +1023,71 @@
         .catch(function (e) { toast(e.message, 'error'); muatUndangan(k.id, cekKurang); });
     };
   }
+  // ---- Bahan rapat (lampiran) ----
+  var MAKS_HAL_BAHAN = 60;
+  function unggahBahan(kid, files) {
+    if (!files.length) return;
+    var chain = Promise.resolve(), ok = 0;
+    files.forEach(function (f) {
+      chain = chain.then(function () {
+        if (!/\.(pdf|pptx?|docx?|jpe?g|png)$/i.test(f.name)) throw new Error(f.name + ': jenis file tidak didukung.');
+        if (f.size > 25 * 1024 * 1024) throw new Error(f.name + ': ukuran file lebih dari 25 MB.');
+        var judul = prompt('Judul bahan rapat (tampil di lampiran):', f.name.replace(/\.[^.]+$/, ''));
+        if (judul === null) return;
+        var jenis = /\.pdf$/i.test(f.name) ? 'pdf' : /\.(jpe?g|png)$/i.test(f.name) ? 'gambar' : 'office';
+        toast(jenis === 'office' ? 'Mengunggah & mengonversi ' + f.name + '… (bisa 1–2 menit)' : 'Mengunggah ' + f.name + '…');
+        return bacaDataUrl(f).then(function (dataUrl) {
+          return api('unggahBahan', { kegiatanId: kid, judul: judul, namaFile: f.name, data: dataUrl });
+        }).then(function (res) {
+          var halaman = jenis === 'pdf' ? pdfKeGambar(f, MAKS_HAL_BAHAN, 1400)
+            : jenis === 'office' ? pdfKeGambar(b64KeBuffer(res.pdf), MAKS_HAL_BAHAN, 1400)
+            : kecilkanGambar(f, 1800, 0.85).then(function (x) { return [x]; });
+          return halaman.then(function (list) {
+            return list.reduce(function (p, dataUrl, i) {
+              return p.then(function () {
+                toast('Menyimpan halaman ' + (i + 1) + ' dari ' + list.length + ' (' + f.name + ')…');
+                return api('unggahHalamanBahan', { bahanId: res.id, data: dataUrl });
+              });
+            }, Promise.resolve());
+          }).then(function () { ok++; });
+        });
+      });
+    });
+    chain.then(function () { if (ok) toast('Bahan rapat berhasil diunggah (' + ok + ' file).', 'ok'); muatBahan(kid); })
+      .catch(function (e) { toast(e.message, 'error'); muatBahan(kid); });
+  }
+  function bacaDataUrl(file) {
+    return new Promise(function (res, rej) {
+      var fr = new FileReader(); fr.onload = function () { res(fr.result); };
+      fr.onerror = function () { rej(new Error('Gagal membaca berkas.')); }; fr.readAsDataURL(file);
+    });
+  }
+  function b64KeBuffer(b64) {
+    var bin = atob(b64), u = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+    return u.buffer;
+  }
+  function muatBahan(kid) {
+    api('daftarBahan', { kegiatanId: kid }).then(function (list) {
+      var g = $('#daftarBahan'); if (!g) return;
+      $('#infoBahan').innerHTML = list.length ? list.length + ' file · ' + list.reduce(function (a, b) { return a + b.jumlahHalaman; }, 0) + ' halaman' : 'Belum ada bahan';
+      g.innerHTML = list.map(function (b) {
+        return '<div class="bahan-item">' +
+          (b.thumb ? '<img src="data:image/jpeg;base64,' + b.thumb + '" alt="">' : '<span class="bahan-ph">📄</span>') +
+          '<div class="bahan-teks"><b>' + esc(b.judul) + '</b><small>' + esc(b.namaFile) + ' · ' + b.jumlahHalaman + ' halaman' +
+          (b.jumlahHalaman ? '' : ' <span class="warn-t">(belum terproses, hapus lalu unggah ulang)</span>') + '</small>' +
+          (b.url ? '<a href="' + esc(b.url) + '" target="_blank" rel="noopener">Buka file asli di Drive ↗</a>' : '') + '</div>' +
+          '<button class="icon-btn" data-bahan="' + esc(b.id) + '" title="Hapus bahan">✕</button></div>';
+      }).join('');
+      $$('[data-bahan]', g).forEach(function (btn) {
+        btn.onclick = function () {
+          if (!confirm('Hapus bahan rapat ini (file asli di Drive ikut dihapus)?')) return;
+          api('hapusBahan', { id: btn.dataset.bahan }).then(function () { muatBahan(kid); })
+            .catch(function (e) { toast(e.message, 'error'); });
+        };
+      });
+    }).catch(function (e) { var g = $('#daftarBahan'); if (g) g.innerHTML = '<div class="empty small">' + esc(e.message) + '</div>'; });
+  }
   function muatUndangan(kid, cb) {
     api('daftarUndangan', { kegiatanId: kid }).then(function (list) {
       var g = $('#gridUnd'); if (!g) return;
@@ -1032,25 +1106,27 @@
       if (cb) cb(list.length);
     }).catch(function (e) { var g = $('#gridUnd'); if (g) g.innerHTML = '<div class="empty small">' + esc(e.message) + '</div>'; });
   }
-  /** Ubah PDF undangan menjadi gambar JPEG per halaman (maks. 6 halaman) memakai pdf.js. */
-  function pdfKeGambar(file) {
+  /** Ubah PDF (File atau ArrayBuffer) menjadi gambar JPEG per halaman memakai pdf.js. Undangan: maks. 6 halaman. */
+  function pdfKeGambar(file, maks, lebar) {
+    maks = maks || 6; lebar = lebar || 1600;
     var base = new URL('vendor/', location.href).href;
     return import(base + 'pdf.min.mjs').then(function (pdfjs) {
       pdfjs.GlobalWorkerOptions.workerSrc = base + 'pdf.worker.min.mjs';
-      return file.arrayBuffer().then(function (buf) { return pdfjs.getDocument({ data: buf }).promise; });
+      return (file instanceof ArrayBuffer ? Promise.resolve(file) : file.arrayBuffer())
+        .then(function (buf) { return pdfjs.getDocument({ data: buf }).promise; });
     }).then(function (pdf) {
-      var jml = Math.min(pdf.numPages, 6), out = [], chain = Promise.resolve();
+      var jml = Math.min(pdf.numPages, maks), out = [], chain = Promise.resolve();
       for (var i = 1; i <= jml; i++) (function (no) {
         chain = chain.then(function () { return pdf.getPage(no); }).then(function (page) {
           var vp1 = page.getViewport({ scale: 1 });
-          var vp = page.getViewport({ scale: 1600 / vp1.width });
+          var vp = page.getViewport({ scale: lebar / Math.max(vp1.width, vp1.height * 0.75) });
           var c = document.createElement('canvas'); c.width = Math.round(vp.width); c.height = Math.round(vp.height);
           var ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
           return page.render({ canvasContext: ctx, viewport: vp }).promise.then(function () { out.push(c.toDataURL('image/jpeg', 0.88)); });
         });
       })(i);
       return chain.then(function () {
-        if (pdf.numPages > 6) toast('PDF memiliki ' + pdf.numPages + ' halaman; hanya 6 halaman pertama yang dipakai.', 'warn');
+        if (pdf.numPages > maks) toast('Dokumen memiliki ' + pdf.numPages + ' halaman; hanya ' + maks + ' halaman pertama yang dipakai.', 'warn');
         return out;
       });
     }).catch(function (e) { throw new Error('Gagal membaca PDF: ' + e.message); });
@@ -1120,7 +1196,9 @@
       var aset = r[0], data = r[1];
       data.notulen = data.notulen || {};
       data.ukuranFoto = ukuranFoto || 'kecil';
-      return Promise.all(data.foto.concat(data.undangan || []).map(function (f) {
+      var halBahan = [];
+      (data.bahan || []).forEach(function (b) { halBahan = halBahan.concat(b.halaman); });
+      return Promise.all(data.foto.concat(data.undangan || [], halBahan).map(function (f) {
         return ukuranGambar('data:' + f.mime + ';base64,' + f.data).then(function (s) { f.w = s.w; f.h = s.h; });
       })).then(function () {
         return window.docx.Packer.toBlob(window.Laporan.buildDokumenRapat(window.docx, data, aset));

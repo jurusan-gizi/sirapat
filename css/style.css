@@ -340,3 +340,12 @@ hr.sep { border: 0; border-top: 1px solid var(--line); margin: 18px 0 14px; }
 .uk-2 { grid-template-rows: 1fr 1fr; }
 .uk-foto input:checked + span .uk-ikon { border-color: var(--teal); }
 .uk-foto input:checked + span .uk-ikon b { background: var(--teal); }
+
+/* Bahan rapat (lampiran) */
+.bahan-list { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.bahan-item { display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 10px; padding: 8px; background: #fff; }
+.bahan-item img, .bahan-ph { width: 64px; height: 48px; object-fit: cover; object-position: top; border-radius: 6px; border: 1px solid var(--line); flex: 0 0 auto; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; background: var(--teal-50); }
+.bahan-teks { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.bahan-teks b { font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bahan-teks small { color: var(--muted); font-size: .76rem; }
+.bahan-teks a { font-size: .78rem; }

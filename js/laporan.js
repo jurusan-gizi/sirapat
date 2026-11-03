@@ -441,6 +441,12 @@
     isi = isi.concat(galeri(D, K, foto.map(function (f) { return { data: b64(f.data), mime: f.mime, w: f.w, h: f.h, ket: f.keterangan || ('Dokumentasi ' + judul) }; }),
       data.ukuranFoto === 'besar' ? 2 : 4));
 
+    // ---- Lampiran: bahan rapat (paling akhir) ----
+    if ((data.bahan || []).length) {
+      isi = isi.concat(judulBagian('LAMPIRAN BAHAN RAPAT', judul.toUpperCase()));
+      data.bahan.forEach(function (b, bi) { isi = isi.concat(lampiranBahan(D, K, b, bi)); });
+    }
+
     return K.dokumen({
       title: 'Dokumen Rapat ' + judul,
       sections: function (pageA4, footerNo) {
@@ -451,6 +457,30 @@
         ];
       }
     });
+  }
+
+  /**
+   * Satu bahan rapat: judul lalu tiap halaman/slide sebagai gambar.
+   * Slide/halaman lanskap: 2 per halaman · halaman potret (dokumen): 1 per halaman.
+   */
+  function lampiranBahan(D, K, b, bi) {
+    var out = [], sisa = 0;   // sisa = kapasitas halaman Word saat ini (dalam "setengah halaman")
+    out.push(K.para([K.run((bi + 1) + '. ' + b.judul, { bold: true })],
+      { spacing: { before: 0, after: 120 }, keepNext: true, pageBreakBefore: bi > 0 }));
+    sisa = 2;
+    b.halaman.forEach(function (f, i) {
+      var ratio = (f.h && f.w) ? f.h / f.w : 0.75, lanskap = ratio <= 1;
+      var w = 140, h = w * ratio, maxH = lanskap ? 90 : 185;
+      if (h > maxH) { h = maxH; w = h / ratio; }
+      var butuh = lanskap ? 1 : 2, pindah = butuh > sisa;
+      if (pindah) sisa = 2;
+      sisa -= butuh;
+      out.push(K.para([K.img(f.data, w, h, /png/.test(f.mime) ? 'png' : 'jpg')],
+        { alignment: K.C, spacing: { before: !pindah && sisa < 1 && i > 0 ? 200 : 0, after: 60 }, keepNext: true, pageBreakBefore: pindah }));
+      out.push(K.para([K.run('Halaman ' + (i + 1) + ' dari ' + b.halaman.length, { size: 18, italics: true })],
+        { alignment: K.C, spacing: { after: 120 } }));
+    });
+    return out;
   }
 
   /**
