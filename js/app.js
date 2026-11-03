@@ -960,9 +960,10 @@
       '<div class="card u-item"><div class="u-head"><span class="u-huruf">G</span><div><h3>Gambar / Foto Kegiatan</h3><small id="infoFoto">' +
       (n.fotoIds ? String(n.fotoIds).split(',').filter(String).length + ' foto' : '<span class="warn-t">Belum ada foto</span>') + '</small></div>' +
       '<a class="btn sm ghost" href="#/kegiatan/' + esc(k.id) + '/notulen">Kelola</a></div></div>' +
-      '<div class="card u-item"><div class="u-head"><span class="u-huruf">B</span><div><h3>Bahan Rapat <small class="muted">(lampiran, opsional)</small></h3><small id="infoBahan">Memuat…</small></div>' +
+      '<div class="card u-item u-lebar"><div class="u-head"><span class="u-huruf">B</span><div><h3>Bahan Rapat</h3><small id="infoBahan">Memuat…</small></div>' +
       '<label class="btn sm primary">📎 Unggah Bahan<input type="file" hidden accept=".pdf,.ppt,.pptx,.doc,.docx,.jpg,.jpeg,.png" multiple id="inBahan"></label></div>' +
-      '<p class="muted small">Materi paparan atau dokumen rapat: <b>PDF, PPT/PPTX, DOC/DOCX</b>, atau gambar (maks. ' + 25 + ' MB per file). File asli tersimpan di Drive; tiap halaman/slide dilampirkan di akhir Dokumen Rapat.</p>' +
+      '<p class="muted small">Opsional · materi paparan atau dokumen rapat: <b>PDF, PPT/PPTX, DOC/DOCX</b>, atau gambar, maks. 25 MB per file. ' +
+      'Boleh pilih <b>beberapa file sekaligus</b>. File asli tersimpan di Drive; tiap halaman/slide dilampirkan di akhir Dokumen Rapat.</p>' +
       '<div id="daftarBahan" class="bahan-list"></div></div>' +
       '</div>' +
       '<div class="grid-side"><div class="card lap-preview">' + miniCover('DOKUMEN RAPAT', k.judul) + '</div>' +
@@ -1028,12 +1029,12 @@
   function unggahBahan(kid, files) {
     if (!files.length) return;
     var chain = Promise.resolve(), ok = 0;
-    files.forEach(function (f) {
+    files.forEach(function (f, fi) {
       chain = chain.then(function () {
+        if (files.length > 1) toast('File ' + (fi + 1) + ' dari ' + files.length + ': ' + f.name);
         if (!/\.(pdf|pptx?|docx?|jpe?g|png)$/i.test(f.name)) throw new Error(f.name + ': jenis file tidak didukung.');
         if (f.size > 25 * 1024 * 1024) throw new Error(f.name + ': ukuran file lebih dari 25 MB.');
-        var judul = prompt('Judul bahan rapat (tampil di lampiran):', f.name.replace(/\.[^.]+$/, ''));
-        if (judul === null) return;
+        var judul = f.name.replace(/\.[^.]+$/, '').replace(/[_]+/g, ' ');   // bisa diubah setelah diunggah (✏️)
         var jenis = /\.pdf$/i.test(f.name) ? 'pdf' : /\.(jpe?g|png)$/i.test(f.name) ? 'gambar' : 'office';
         toast(jenis === 'office' ? 'Mengunggah & mengonversi ' + f.name + '… (bisa 1–2 menit)' : 'Mengunggah ' + f.name + '…');
         return bacaDataUrl(f).then(function (dataUrl) {
@@ -1077,8 +1078,18 @@
           '<div class="bahan-teks"><b>' + esc(b.judul) + '</b><small>' + esc(b.namaFile) + ' · ' + b.jumlahHalaman + ' halaman' +
           (b.jumlahHalaman ? '' : ' <span class="warn-t">(belum terproses, hapus lalu unggah ulang)</span>') + '</small>' +
           (b.url ? '<a href="' + esc(b.url) + '" target="_blank" rel="noopener">Buka file asli di Drive ↗</a>' : '') + '</div>' +
+          '<button class="icon-btn" data-judul="' + esc(b.id) + '" title="Ubah judul">✏️</button>' +
           '<button class="icon-btn" data-bahan="' + esc(b.id) + '" title="Hapus bahan">✕</button></div>';
       }).join('');
+      $$('[data-judul]', g).forEach(function (btn) {
+        btn.onclick = function () {
+          var b = list.filter(function (x) { return x.id === btn.dataset.judul; })[0];
+          var j = prompt('Judul bahan rapat (tampil di lampiran Dokumen Rapat):', b.judul);
+          if (j === null || !j.trim() || j.trim() === b.judul) return;
+          api('ubahJudulBahan', { id: b.id, judul: j.trim() }).then(function () { muatBahan(kid); })
+            .catch(function (e) { toast(e.message, 'error'); });
+        };
+      });
       $$('[data-bahan]', g).forEach(function (btn) {
         btn.onclick = function () {
           if (!confirm('Hapus bahan rapat ini (file asli di Drive ikut dihapus)?')) return;

@@ -9,7 +9,7 @@
    Bila diminta izin, klik Izinkan.
 
 ## 2. GitHub repo sirapat
-Ganti: js/app.js, js/laporan.js, css/style.css, sw.js (versi v15).
+Ganti: js/app.js, js/laporan.js, css/style.css, sw.js (versi v16).
 Lalu muat ulang SiRapat 1–2 kali.
 
 ## 3. Cara pakai

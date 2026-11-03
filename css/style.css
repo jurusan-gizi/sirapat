@@ -349,3 +349,8 @@ hr.sep { border: 0; border-top: 1px solid var(--line); margin: 18px 0 14px; }
 .bahan-teks b { font-size: .88rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bahan-teks small { color: var(--muted); font-size: .76rem; }
 .bahan-teks a { font-size: .78rem; }
+.uang .u-lebar { grid-column: 1 / -1; }
+.bahan-item .icon-btn { flex: 0 0 auto; }
+/* U & B selebar penuh, A-N-G tiga kolom sama lebar */
+.uang { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 760px) { .uang { grid-template-columns: minmax(0, 1fr); } }
