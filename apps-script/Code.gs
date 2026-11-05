@@ -36,7 +36,7 @@ var SHEETS = {
   Notulen: ['kegiatanId', 'latarBelakang', 'dasarPelaksanaan', 'tujuan', 'agenda',
             'pembahasan', 'keputusan', 'tindakLanjut', 'kesimpulan', 'saran',
             'kataPengantar', 'pimpinanRapat', 'nipPimpinan', 'jabatanPimpinan',
-            'notulis', 'nipNotulis', 'fotoIds', 'diubahOleh', 'diubahPada', 'jabatanNotulis'],
+            'notulis', 'nipNotulis', 'fotoIds', 'diubahOleh', 'diubahPada', 'jabatanNotulis', 'pembahasanData'],
   // Rencana Tindak Lanjut hasil rapat (Penetapan)
   RTL: ['id', 'kegiatanId', 'urut', 'uraian', 'pj', 'tenggat', 'target', 'asalRtlId', 'dibuatPada'],
   // Evaluasi RTL pada rapat berikutnya (Evaluasi, Pengendalian, Peningkatan)
@@ -576,7 +576,7 @@ function simpanNotulen_(p, user) {
   return withLock_(function () {
     var row = rows_('Notulen').filter(function (r) { return r.kegiatanId === p.kegiatanId; })[0];
     var data = row ? Object.assign({}, row) : { kegiatanId: p.kegiatanId, fotoIds: '' };
-    ['latarBelakang', 'dasarPelaksanaan', 'tujuan', 'agenda', 'pembahasan', 'keputusan',
+    ['latarBelakang', 'dasarPelaksanaan', 'tujuan', 'agenda', 'pembahasan', 'pembahasanData', 'keputusan',
      'tindakLanjut', 'kesimpulan', 'saran', 'kataPengantar'].forEach(function (f) {
       if (p[f] !== undefined) data[f] = clean_(p[f], 45000);
     });

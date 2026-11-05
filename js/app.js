@@ -619,10 +619,114 @@
 
   // ---- Tab notulen & RTL ----
   var NOTULEN_FIELDS = [
-    ['agenda', 'Agenda / Susunan Acara', 4, 'mis. 1. Pembukaan  2. Evaluasi RTL  3. Diskusi  4. Penutup'],
-    ['pembahasan', 'Hasil Pembahasan / Jalannya Rapat', 8, 'Uraikan poin-poin pembahasan.'],
-    ['keputusan', 'Keputusan / Kesepakatan', 4, '']
+    ['agenda', 'Agenda / Susunan Acara', 4, 'Satu agenda per baris (tanpa nomor), mis. Evaluasi PBM semester ganjil'],
+    ['keputusan', 'Keputusan / Kesepakatan', 4, 'Satu keputusan per baris.']
   ];
+
+  // ---- Pembahasan terstruktur: pokok bahasan → poin & tanggapan peserta ----
+  /** Rapikan satu kalimat: buang nomor/bullet, spasi ganda, huruf awal kapital, titik di akhir. */
+  function rapikanKalimat(x) {
+    x = String(x || '').replace(/^\s*(?:[-•*–·]|\d{1,2}[.)]|[a-zA-Z][.)])\s+/, '').replace(/\s+/g, ' ').trim();
+    if (!x) return '';
+    x = x.charAt(0).toUpperCase() + x.slice(1);
+    if (!/[.!?:;)"”']$/.test(x)) x += '.';
+    return x;
+  }
+  function poinRapi(t) { return String(t || '').replace(/\r/g, '').split('\n').map(rapikanKalimat).filter(Boolean); }
+  function bacaPembahasan(n) {
+    try { var v = JSON.parse(n.pembahasanData || ''); if (v && Array.isArray(v.topik)) return v; } catch (e) {}
+    return null;
+  }
+  /** Struktur → teks bernomor (cadangan untuk laporan versi lama & ringkasan). */
+  function pembahasanKeTeks(pb) {
+    var out = [];
+    (pb.topik || []).forEach(function (t, i) {
+      var poin = poinRapi(t.poin), tg = (t.tanggapan || []).filter(function (x) { return String(x.isi || '').trim(); });
+      if (!String(t.judul || '').trim() && !poin.length && !tg.length) return;
+      out.push((i + 1) + '. ' + (String(t.judul || '').trim() || 'Pembahasan'));
+      poin.forEach(function (p) { out.push('- ' + p); });
+      tg.forEach(function (x) { out.push('- Tanggapan ' + (String(x.pembicara || '').trim() || 'peserta') + ': ' + poinRapi(x.isi).join(' ')); });
+    });
+    return out.join('\n');
+  }
+  /** Jarak Levenshtein sederhana (untuk mengenali salah ketik nama, mis. Theresia ↔ Thresia). */
+  function jarak(a, b) {
+    var m = [], i, j;
+    for (i = 0; i <= a.length; i++) m[i] = [i];
+    for (j = 0; j <= b.length; j++) m[0][j] = j;
+    for (i = 1; i <= a.length; i++) for (j = 1; j <= b.length; j++)
+      m[i][j] = Math.min(m[i - 1][j] + 1, m[i][j - 1] + 1, m[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    return m[a.length][b.length];
+  }
+  /** Teks notulen lama (bebas) → struktur, sebisanya. Nama pembicara dikenali dari daftar hadir. */
+  function teksKeStruktur(t, namaHadir) {
+    var pb = { topik: [] }, cur = null, tg = null;
+    var namaPendek = namaHadir.map(function (n) { return { penuh: n, kunci: String(n).split(',')[0].toLowerCase().replace(/^((dr|prof|ir|hj?|drs|dra)\.?\s*)+/, '').trim() }; });
+    function cariNama(baris) {
+      var b = baris.toLowerCase().replace(/[:\s]+$/, '');
+      if (b.length > 40 || /[.?!]/.test(b.replace(/^(dr|prof|ir|hj?)\./, ''))) return null;
+      var depan = b.split(/\s+/)[0];
+      var hit = namaPendek.filter(function (x) { return x.kunci && (x.kunci.indexOf(b) === 0 || b.indexOf(x.kunci.split(' ')[0]) === 0); })[0] ||
+        namaPendek.filter(function (x) { var k0 = x.kunci.split(' ')[0]; return depan.length >= 4 && jarak(depan, k0) <= (k0.length > 6 ? 2 : 1); })[0];
+      return hit ? hit.penuh : (/^[A-Z][a-zA-Z.' ]{2,30}$/.test(baris.trim()) && baris.trim().split(/\s+/).length <= 3 ? baris.trim() : null);
+    }
+    String(t || '').replace(/\r/g, '').split('\n').forEach(function (ln) {
+      var s = ln.trim();
+      if (!s || /^(diskusi|pembahasan|lampiran)\s*:?$/i.test(s)) return;
+      var mN = s.match(/^(\d{1,2})[.)]\s+(.*)$/), nama = cariNama(s);
+      if (nama) {
+        if (!cur) { cur = { judul: 'Diskusi', poin: '', tanggapan: [] }; pb.topik.push(cur); }
+        tg = { pembicara: nama, isi: '' }; cur.tanggapan.push(tg); return;
+      }
+      if (mN && !tg) { cur = { judul: mN[2], poin: '', tanggapan: [] }; pb.topik.push(cur); return; }
+      if (!cur) { cur = { judul: 'Pembahasan', poin: '', tanggapan: [] }; pb.topik.push(cur); }
+      if (tg) tg.isi += (tg.isi ? '\n' : '') + s.replace(/^[-•*–]\s*/, '');
+      else cur.poin += (cur.poin ? '\n' : '') + s.replace(/^(?:[-•*–]|[a-z][.)])\s*/, '');
+    });
+    return pb;
+  }
+  function editorPembahasan(wadah, pb, namaHadir, agenda, onUbah) {
+    var dl = 'dlHadir';
+    function topikHtml(t, i) {
+      return '<div class="rtl-row pb-topik" data-i="' + i + '"><div class="rtl-no">' + (i + 1) + '</div><div class="rtl-body">' +
+        '<input data-f="judul" list="dlAgenda" placeholder="Pokok bahasan (mis. Evaluasi kinerja triwulan III)" value="' + esc(t.judul) + '" style="font-weight:600">' +
+        '<label><small>Poin pembahasan — satu poin per baris, tanpa nomor</small><textarea data-f="poin" rows="3" spellcheck="true" lang="id">' + esc(t.poin) + '</textarea></label>' +
+        '<div class="pb-tg">' + (t.tanggapan || []).map(function (x, j) {
+          return '<div class="pb-tg-row" data-j="' + j + '"><input data-g="pembicara" list="' + dl + '" placeholder="Nama (ketik, pilih dari daftar hadir)" value="' + esc(x.pembicara) + '">' +
+            '<textarea data-g="isi" rows="2" placeholder="Tanggapan / pertanyaan — satu poin per baris" spellcheck="true" lang="id">' + esc(x.isi) + '</textarea>' +
+            '<button type="button" class="icon-btn" data-hapus-tg="' + j + '" title="Hapus tanggapan">✕</button></div>';
+        }).join('') + '</div>' +
+        '<button type="button" class="btn sm ghost" data-tambah-tg>＋ Tanggapan / tanya jawab</button></div>' +
+        '<button type="button" class="icon-btn" data-hapus-topik title="Hapus pokok bahasan">✕</button></div>';
+    }
+    function gambar() {
+      wadah.innerHTML = '<datalist id="' + dl + '">' + namaHadir.map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist>' +
+        '<datalist id="dlAgenda">' + agenda.map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist>' +
+        '<div class="rtl-list">' + pb.topik.map(topikHtml).join('') + '</div>' +
+        '<button type="button" class="btn sm" data-tambah-topik>＋ Tambah pokok bahasan</button>';
+    }
+    function kumpul() {
+      $$('.pb-topik', wadah).forEach(function (el) {
+        var t = pb.topik[el.dataset.i]; if (!t) return;
+        t.judul = $('[data-f="judul"]', el).value; t.poin = $('[data-f="poin"]', el).value;
+        $$('.pb-tg-row', el).forEach(function (r) { var x = t.tanggapan[r.dataset.j]; x.pembicara = $('[data-g="pembicara"]', r).value; x.isi = $('[data-g="isi"]', r).value; });
+      });
+      return pb;
+    }
+    wadah.addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      kumpul();
+      var el = b.closest('.pb-topik'), i = el ? Number(el.dataset.i) : -1;
+      if (b.hasAttribute('data-tambah-topik')) { pb.topik.push({ judul: '', poin: '', tanggapan: [] }); gambar(); var j = $$('.pb-topik [data-f="judul"]', wadah); j[j.length - 1].focus(); }
+      else if (b.hasAttribute('data-hapus-topik')) { if ((pb.topik[i].poin || pb.topik[i].tanggapan.length) && !confirm('Hapus pokok bahasan ini beserta isinya?')) return; pb.topik.splice(i, 1); gambar(); }
+      else if (b.hasAttribute('data-tambah-tg')) { pb.topik[i].tanggapan.push({ pembicara: '', isi: '' }); gambar(); var r = $$('.pb-topik[data-i="' + i + '"] [data-g="pembicara"]', wadah); r[r.length - 1].focus(); }
+      else if (b.hasAttribute('data-hapus-tg')) { pb.topik[i].tanggapan.splice(Number(b.dataset.hapusTg), 1); gambar(); }
+      else return;
+      onUbah();
+    });
+    gambar();
+    return { kumpul: kumpul, gambar: gambar };
+  }
   function textareaFields(list, n) {
     return list.map(function (f) {
       return field(f[1], '<textarea name="' + f[0] + '" rows="' + f[2] + '">' + esc(n[f[0]]) + '</textarea>', f[3]);
@@ -684,7 +788,13 @@
       field('Nama Notulis', '<input name="notulis" value="' + esc(n.notulis) + '">') +
       field('NIP Notulis', '<input name="nipNotulis" inputmode="numeric" value="' + esc(n.nipNotulis) + '">') +
       field('Jabatan Notulis', '<input name="jabatanNotulis" placeholder="mis. Sekretaris Jurusan Gizi" value="' + esc(n.jabatanNotulis) + '">') +
-      '</div><p class="muted small">Terisi otomatis dari menu Pengaturan; ubah bila rapat dipimpin/dinotulis orang lain.</p><h3 class="sect">Isi Notulen</h3>' + textareaFields(NOTULEN_FIELDS, n) +
+      '</div><p class="muted small">Terisi otomatis dari menu Pengaturan; ubah bila rapat dipimpin/dinotulis orang lain.</p><h3 class="sect">Isi Notulen</h3>' + textareaFields(NOTULEN_FIELDS.slice(0, 1), n) +
+      '<h3 class="sect">Pembahasan</h3>' +
+      '<p class="hint">📝 Buat satu <b>pokok bahasan</b> per topik/agenda. Tulis poin <b>satu per baris</b> tanpa nomor — penomoran, huruf kapital, dan titik dirapikan otomatis. ' +
+      'Tanggapan peserta: ketik nama lalu pilih dari daftar hadir agar ejaan & gelar seragam.</p>' +
+      '<div id="pbMigrasi"></div><div id="pbEditor"></div>' +
+      '<input type="hidden" name="pembahasan" value="' + esc(n.pembahasan) + '"><input type="hidden" name="pembahasanData" value="' + esc(n.pembahasanData) + '">' +
+      textareaFields(NOTULEN_FIELDS.slice(1), n) +
       '<h3 class="sect">Rencana Tindak Lanjut (RTL) <span class="tag">Penetapan</span></h3>' +
       '<p class="muted small">RTL akan dievaluasi pada rapat berikutnya melalui menu <b>Evaluasi RTL</b>.</p>' +
       '<div id="rtlList" class="rtl-list"></div>' +
@@ -696,6 +806,39 @@
       '<div id="fotoGrid" class="fotogrid"><div class="empty small">Memuat foto…</div></div></div>';
     renderRtl(rtl);
     var form = $('#fn');
+    // ---- editor pembahasan terstruktur ----
+    var namaHadir = (d.hadir || []).map(function (h) { return h.nama; }).filter(Boolean);
+    var agendaList = String(n.agenda || '').split('\n').map(function (x) { return x.replace(/^\s*\d{1,2}[.)]\s*/, '').trim(); }).filter(Boolean);
+    var pb = bacaPembahasan(n);
+    if (!pb) {
+      pb = { topik: agendaList.length ? agendaList.map(function (a) { return { judul: a, poin: '', tanggapan: [] }; }) : [{ judul: '', poin: '', tanggapan: [] }] };
+      if (String(n.pembahasan || '').trim()) {
+        $('#pbMigrasi').innerHTML = '<div class="hint warn">Notulen ini masih berupa teks bebas (format lama). ' +
+          '<button type="button" class="btn sm" id="btnMigrasi">🪄 Rapikan otomatis ke format terstruktur</button> ' +
+          '<small>Periksa kembali hasilnya sebelum disimpan.</small></div>';
+        $('#btnMigrasi').onclick = function () {
+          pb = teksKeStruktur(n.pembahasan, namaHadir);
+          if (!pb.topik.length) pb.topik.push({ judul: '', poin: n.pembahasan, tanggapan: [] });
+          ed = editorPembahasan($('#pbEditor'), pb, namaHadir, agendaList, sinkron);
+          $('#pbMigrasi').innerHTML = '<div class="hint ok">✔ Teks lama dipecah menjadi ' + pb.topik.length + ' pokok bahasan. Periksa, lalu tekan Simpan.</div>';
+          sinkron();
+        };
+      }
+    }
+    var ed = editorPembahasan($('#pbEditor'), pb, namaHadir, agendaList, sinkron);
+    function sinkron() {
+      var data = ed.kumpul();
+      form.elements.pembahasanData.value = JSON.stringify(data);
+      form.elements.pembahasan.value = pembahasanKeTeks(data);
+      if (form.oninput) form.oninput();
+    }
+    // isi kolom tersembunyi sebelum draf disimpan (fase capture berjalan lebih dulu)
+    form.addEventListener('input', function (e) {
+      if (!e.target.closest('#pbEditor')) return;
+      var data = ed.kumpul();
+      form.elements.pembahasanData.value = JSON.stringify(data);
+      form.elements.pembahasan.value = pembahasanKeTeks(data);
+    }, true);
     form.oninput = function () {
       lsSet('sirapat_draft_' + kid, { t: Date.now(), data: formData(form), rtl: kumpulkanRtl() });
       $('#savedInfo').textContent = 'Ada perubahan belum disimpan';
@@ -707,6 +850,9 @@
     form.onsubmit = function (e) {
       e.preventDefault();
       var b = $('#btnSN'); busy(b, true, 'Menyimpan…');
+      var pbData = ed.kumpul();
+      form.elements.pembahasanData.value = JSON.stringify(pbData);
+      form.elements.pembahasan.value = pembahasanKeTeks(pbData);
       var data = {}; $$('[name]', form).forEach(function (el) { data[el.name] = el.value; });
       data.kegiatanId = kid;
       var items = kumpulkanRtl().filter(function (r) { return r.uraian && r.uraian.trim(); });

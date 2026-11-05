@@ -427,9 +427,12 @@
     function bagian(label, t) {
       return [para([run(label, { bold: true })], { spacing: { before: 200, after: 60 }, keepNext: true })].concat(K.teks(t, { noIndent: true }));
     }
-    isi = isi.concat(bagian('Agenda:', n.agenda || k.deskripsi));
-    isi = isi.concat(bagian('Pembahasan:', n.pembahasan));
-    isi = isi.concat(bagian('Keputusan / Kesepakatan:', n.keputusan));
+    isi = isi.concat(bagian('Agenda:', daftarBernomor(n.agenda || k.deskripsi)));
+    var pbData = null;
+    try { pbData = JSON.parse(n.pembahasanData || ''); } catch (e) { pbData = null; }
+    if (pbData && Array.isArray(pbData.topik) && pbData.topik.length) isi = isi.concat(pembahasanTerstruktur(D, K, pbData));
+    else isi = isi.concat(bagian('Pembahasan:', n.pembahasan));
+    isi = isi.concat(bagian('Keputusan / Kesepakatan:', daftarPoin(n.keputusan)));
     isi.push(para([run('Rencana Tindak Lanjut (RTL):', { bold: true })], { spacing: { before: 200, after: 80 }, keepNext: true }));
     if (rtl.length) isi.push(K.tabelRtl(rtl));
     else isi = isi.concat(K.teks(n.tindakLanjut, { noIndent: true, fallback: '-' }));
@@ -457,6 +460,58 @@
         ];
       }
     });
+  }
+
+  /* ---- Notulen rapi: penomoran, huruf kapital & titik otomatis ---- */
+  function rapikanKalimat(x) {
+    x = String(x || '').replace(/^\s*(?:[-•*–·]|\d{1,2}[.)]|[a-zA-Z][.)])\s+/, '').replace(/\s+/g, ' ').trim();
+    if (!x) return '';
+    x = x.charAt(0).toUpperCase() + x.slice(1);
+    if (!/[.!?:;)"”']$/.test(x)) x += '.';
+    return x;
+  }
+  function poinRapi(t) { return String(t || '').replace(/\r/g, '').split('\n').map(rapikanKalimat).filter(Boolean); }
+  /** Teks per baris → "1. …" (dibaca K.teks sebagai daftar bernomor). */
+  function daftarBernomor(t) { return poinRapi(t).map(function (x, i) { return (i + 1) + '. ' + x.replace(/\.$/, ''); }).join('\n'); }
+  function daftarPoin(t) { return poinRapi(t).map(function (x) { return '- ' + x; }).join('\n'); }
+
+  /** Pembahasan terstruktur: pokok bahasan bernomor → poin (•) → tanggapan peserta (nama tebal). */
+  function pembahasanTerstruktur(D, K, pb) {
+    var para = K.para, run = K.run, J = K.J, mmT = K.mmT;
+    var out = [para([run('Pembahasan:', { bold: true })], { spacing: { before: 200, after: 60 }, keepNext: true })];
+    var no = 0;
+    pb.topik.forEach(function (t) {
+      var poin = poinRapi(t.poin);
+      var tg = (t.tanggapan || []).filter(function (x) { return String(x.isi || '').trim(); });
+      var judul = String(t.judul || '').trim();
+      if (!judul && !poin.length && !tg.length) return;
+      no++;
+      K.addLines(1.6);
+      out.push(para([run(no + '.\t' + (judul ? judul.charAt(0).toUpperCase() + judul.slice(1) : 'Pembahasan'), { bold: true })],
+        { spacing: { before: 140, after: 40 }, keepNext: true, indent: { left: mmT(7), hanging: mmT(7) }, tabStops: [{ type: D.TabStopType.LEFT, position: mmT(7) }] }));
+      poin.forEach(function (p) {
+        K.addLines(Math.ceil(p.length / 66) + 0.4);
+        out.push(para([run('•\t' + p)], { alignment: J, indent: { left: mmT(12), hanging: mmT(5) }, tabStops: [{ type: D.TabStopType.LEFT, position: mmT(12) }], spacing: { after: 20 } }));
+      });
+      if (tg.length) {
+        K.addLines(1.2);
+        out.push(para([run('Tanggapan / diskusi:', { bold: true, italics: true, size: 22 })], { indent: { left: mmT(7) }, spacing: { before: 60, after: 20 }, keepNext: true }));
+        tg.forEach(function (x) {
+          var isi = poinRapi(x.isi), nama = String(x.pembicara || '').trim() || 'Peserta';
+          K.addLines(isi.length * 1.4 + 1);
+          if (isi.length === 1) {
+            out.push(para([run('–\t'), run(nama + ': ', { bold: true }), run(isi[0])], { alignment: J, indent: { left: mmT(12), hanging: mmT(5) }, tabStops: [{ type: D.TabStopType.LEFT, position: mmT(12) }], spacing: { after: 20 } }));
+          } else {
+            out.push(para([run('–\t'), run(nama + ':', { bold: true })], { indent: { left: mmT(12), hanging: mmT(5) }, tabStops: [{ type: D.TabStopType.LEFT, position: mmT(12) }], spacing: { after: 0 }, keepNext: true }));
+            isi.forEach(function (p) {
+              out.push(para([run('·\t' + p)], { alignment: J, indent: { left: mmT(17), hanging: mmT(4) }, tabStops: [{ type: D.TabStopType.LEFT, position: mmT(17) }], spacing: { after: 0 } }));
+            });
+          }
+        });
+      }
+    });
+    if (!no) out = out.concat(K.belumDiisi());
+    return out;
   }
 
   /**

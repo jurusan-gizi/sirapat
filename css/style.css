@@ -354,3 +354,10 @@ hr.sep { border: 0; border-top: 1px solid var(--line); margin: 18px 0 14px; }
 /* U & B selebar penuh, A-N-G tiga kolom sama lebar */
 .uang { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 760px) { .uang { grid-template-columns: minmax(0, 1fr); } }
+
+/* Pembahasan terstruktur (notulen) */
+.pb-topik .rtl-body > input[data-f="judul"] { width: 100%; margin-bottom: 8px; }
+.pb-topik label small { display: block; margin-bottom: 4px; }
+.pb-tg { display: grid; gap: 8px; margin: 8px 0; }
+.pb-tg-row { display: grid; grid-template-columns: 220px 1fr auto; gap: 8px; align-items: start; padding: 8px; border-radius: 10px; background: #F6F9E4; border-left: 3px solid var(--lime, #C9DA2B); }
+@media (max-width: 680px) { .pb-tg-row { grid-template-columns: 1fr; } }
